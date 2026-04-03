@@ -30,13 +30,16 @@ def health():
 # In production, replace "*" with your Vercel domain
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://soccer-bets.vercel.app"],  # Change to ["https://your-app.vercel.app"] in production
+    allow_origins=["https://soccer-bets.vercel.app", "http://localhost:3000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-DB_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "soccer.db")
+# Look for soccer.db in same dir first (Render), then parent dir (local dev)
+_here = os.path.dirname(os.path.abspath(__file__))
+_parent = os.path.dirname(_here)
+DB_PATH = os.path.join(_here, "soccer.db") if os.path.exists(os.path.join(_here, "soccer.db")) else os.path.join(_parent, "soccer.db")
 print("USING DATABASE AT:", DB_PATH)
 
 def get_db():

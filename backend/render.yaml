@@ -3,7 +3,7 @@ services:
     name: soccer-api
     env: python
     plan: free
-    buildCommand: pip install -r requirements.txt
+    buildCommand: pip install -r requirements.txt && python -c "import zipfile; zipfile.ZipFile('soccer.db.zip').extractall('.')"
     startCommand: python main.py
     healthCheckPath: /health
     healthCheckTimeout: 30
