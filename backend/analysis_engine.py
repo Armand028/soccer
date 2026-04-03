@@ -51,8 +51,8 @@ def calculate_moment_form(team_name, limit=5):
     # Ordering by id DESC acts as a proxy for date since they were inserted mostly chronologically
     cursor.execute('''
     SELECT * FROM matches 
-    WHERE home_team = ? OR away_team = ? 
-    ORDER BY id DESC LIMIT ?
+    WHERE (home_team = ? OR away_team = ?) AND home_score >= 0 AND away_score >= 0
+    ORDER BY COALESCE(kickoff_timestamp, id) DESC LIMIT ?
     ''', (team_name, team_name, limit))
     
     matches = cursor.fetchall()
@@ -98,9 +98,10 @@ def calculate_h2h(team_a, team_b):
     
     cursor.execute('''
     SELECT * FROM matches 
-    WHERE (home_team = ? AND away_team = ?) 
-       OR (home_team = ? AND away_team = ?)
-    ORDER BY id DESC
+    WHERE ((home_team = ? AND away_team = ?) 
+       OR (home_team = ? AND away_team = ?))
+       AND home_score >= 0 AND away_score >= 0
+    ORDER BY COALESCE(kickoff_timestamp, id) DESC
     ''', (team_a, team_b, team_b, team_a))
     
     matches = cursor.fetchall()
@@ -163,7 +164,7 @@ def calculate_goal_expectancy(home_team, away_team, league_name):
     # Get all matches in this league to establish the league average
     # We'll limit to the last 300 matches (roughly one season) for recent relevance
     cursor.execute('''
-    SELECT * FROM matches WHERE league = ? ORDER BY id DESC LIMIT 300
+    SELECT * FROM matches WHERE league = ? AND home_score >= 0 AND away_score >= 0 ORDER BY COALESCE(kickoff_timestamp, id) DESC LIMIT 300
     ''', (league_name,))
     league_matches = cursor.fetchall()
     
@@ -182,7 +183,7 @@ def calculate_goal_expectancy(home_team, away_team, league_name):
     avg_away_goals_conceded = avg_home_goals_scored
     
     # Calculate Home Team Metrics
-    cursor.execute('''SELECT * FROM matches WHERE home_team = ? ORDER BY id DESC LIMIT 20''', (home_team,))
+    cursor.execute('''SELECT * FROM matches WHERE home_team = ? AND home_score >= 0 ORDER BY COALESCE(kickoff_timestamp, id) DESC LIMIT 20''', (home_team,))
     home_matches = cursor.fetchall()
     if len(home_matches) == 0:
         home_attack_strength = 1.0
@@ -195,7 +196,7 @@ def calculate_goal_expectancy(home_team, away_team, league_name):
         home_defense_strength = home_goals_conceded / max(avg_home_goals_conceded, 0.1)
 
     # Calculate Away Team Metrics
-    cursor.execute('''SELECT * FROM matches WHERE away_team = ? ORDER BY id DESC LIMIT 20''', (away_team,))
+    cursor.execute('''SELECT * FROM matches WHERE away_team = ? AND away_score >= 0 ORDER BY COALESCE(kickoff_timestamp, id) DESC LIMIT 20''', (away_team,))
     away_matches = cursor.fetchall()
     if len(away_matches) == 0:
         away_attack_strength = 1.0

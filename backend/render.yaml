@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: soccer-api
+    env: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python main.py
+    healthCheckPath: /api/leagues
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.9
+    autoDeploy: true
