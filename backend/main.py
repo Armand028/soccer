@@ -26,7 +26,7 @@ app = FastAPI(title="Soccer Bets Analyzer API", lifespan=lifespan)
 # In production, replace "*" with your Vercel domain
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://your-app.vercel.app"],  # Change to ["https://your-app.vercel.app"] in production
+    allow_origins=["https://soccer-bets.vercel.app"],  # Change to ["https://your-app.vercel.app"] in production
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
