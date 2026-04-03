@@ -22,6 +22,10 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Soccer Bets Analyzer API", lifespan=lifespan)
 
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
 # Allow CORS for Next.js frontend
 # In production, replace "*" with your Vercel domain
 app.add_middleware(

@@ -5,7 +5,9 @@ services:
     plan: free
     buildCommand: pip install -r requirements.txt
     startCommand: python main.py
-    healthCheckPath: /api/leagues
+    healthCheckPath: /health
+    healthCheckTimeout: 30
+    healthCheckInterval: 10
     envVars:
       - key: PYTHON_VERSION
         value: 3.9
