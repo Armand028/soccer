@@ -12,7 +12,9 @@ import time
 import os
 import sys
 
-DB_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "soccer.db")
+_here = os.path.dirname(os.path.abspath(__file__))
+_parent = os.path.dirname(_here)
+DB_PATH = os.path.join(_here, "soccer.db") if os.path.exists(os.path.join(_here, "soccer.db")) else os.path.join(_parent, "soccer.db")
 RAPID_API_KEY = os.environ.get("RAPIDAPI_KEY", "71f1cb10a2msh46e08954191fd4dp1e55cajsne7b50af76124")
 RAPID_API_HOST = "sportapi7.p.rapidapi.com"
 BASE_URL = f"https://{RAPID_API_HOST}/api/v1"
@@ -26,6 +28,18 @@ TOURNAMENTS = {
     7: "UEFA Champions League",
     52: "Trendyol Super Lig",
     238: "Liga Portugal",
+    # Cup competitions
+    29: "FA Cup",
+    27: "EFL Cup",
+    329: "Copa del Rey",
+    328: "Coppa Italia",
+    335: "Coupe de France",
+    119: "DFB-Pokal",
+    17015: "UEFA Conference League",
+    488: "Supercopa de España",
+    382: "Supercoppa Italiana",
+    529: "DFL-Supercup",
+    487: "FA Community Shield",
 }
 
 TARGET_SEASON_YEARS = ["20/21", "21/22", "22/23", "23/24", "24/25", "25/26",

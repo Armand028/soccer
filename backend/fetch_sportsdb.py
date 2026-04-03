@@ -19,7 +19,9 @@ import logging
 log = logging.getLogger("fetch_sdb")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(message)s")
 
-DB_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "soccer.db")
+_here = os.path.dirname(os.path.abspath(__file__))
+_parent = os.path.dirname(_here)
+DB_PATH = os.path.join(_here, "soccer.db") if os.path.exists(os.path.join(_here, "soccer.db")) else os.path.join(_parent, "soccer.db")
 
 API_KEY = "123"  # Free public key
 BASE_URL = f"https://www.thesportsdb.com/api/v1/json/{API_KEY}"
@@ -32,6 +34,19 @@ LEAGUES = {
     "4331": ("Germany Bundesliga 1", 34),
     "4334": ("France ligue 1", 38),   # 38 until 2022-23, then 34 from 2023-24
     "4480": ("UEFA Champions League", 15),  # group+knockout rounds vary
+}
+
+# Cup competitions — 2025-2026 only
+CUP_LEAGUES = {
+    "4482": ("FA Cup", 13),
+    "4570": ("EFL Cup", 7),
+    "4571": ("FA Community Shield", 1),
+    "4483": ("Copa del Rey", 7),
+    "4506": ("Coppa Italia", 8),
+    "4507": ("Supercoppa Italiana", 1),
+    "4484": ("Coupe de France", 10),
+    "4485": ("DFB-Pokal", 6),
+    "5071": ("UEFA Conference League", 15),
 }
 
 # Seasons to backfill
@@ -219,7 +234,8 @@ def fetch_live(silent=False):
     conn = get_db()
     cursor = conn.cursor()
 
-    for lid, (lname, _) in LEAGUES.items():
+    all_leagues = {**LEAGUES, **CUP_LEAGUES}
+    for lid, (lname, _) in all_leagues.items():
         # Past 15 (recently finished)
         data = api_get(f"eventspastleague.php?id={lid}")
         if data and data.get("events"):
@@ -266,6 +282,23 @@ def backfill_all():
     return grand_ins, grand_upd
 
 
+def backfill_cups(season="2025-2026"):
+    """Fetch all cup competitions for a given season."""
+    total_combos = len(CUP_LEAGUES)
+    done = 0
+    grand_ins, grand_upd = 0, 0
+    log.info(f"=== CUP BACKFILL: {total_combos} cups for {season} ===")
+    for lid in CUP_LEAGUES:
+        done += 1
+        lname = CUP_LEAGUES[lid][0]
+        log.info(f"[{done}/{total_combos}] {lname} {season}")
+        ins, upd = fetch_season_full(lid, season, silent=False)
+        grand_ins += ins
+        grand_upd += upd
+    log.info(f"=== CUP BACKFILL COMPLETE: {grand_ins} new, {grand_upd} updated ===")
+    return grand_ins, grand_upd
+
+
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
@@ -274,6 +307,9 @@ if __name__ == "__main__":
 
     if cmd == "backfill":
         backfill_all()
+    elif cmd == "cups":
+        s = sys.argv[2] if len(sys.argv) > 2 else "2025-2026"
+        backfill_cups(s)
     elif cmd == "season":
         lid = sys.argv[2] if len(sys.argv) > 2 else "4328"
         s = sys.argv[3] if len(sys.argv) > 3 else "2024-2025"
@@ -283,5 +319,6 @@ if __name__ == "__main__":
     else:
         print("Usage:")
         print("  python fetch_sportsdb.py backfill")
+        print("  python fetch_sportsdb.py cups [2025-2026]")
         print("  python fetch_sportsdb.py season 4328 2024-2025")
         print("  python fetch_sportsdb.py live")

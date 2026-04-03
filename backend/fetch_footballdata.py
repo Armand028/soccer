@@ -21,7 +21,9 @@ import logging
 log = logging.getLogger("fetch_fd")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(message)s")
 
-DB_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "soccer.db")
+_here = os.path.dirname(os.path.abspath(__file__))
+_parent = os.path.dirname(_here)
+DB_PATH = os.path.join(_here, "soccer.db") if os.path.exists(os.path.join(_here, "soccer.db")) else os.path.join(_parent, "soccer.db")
 
 API_KEY = os.environ.get("FOOTBALL_DATA_API_KEY", "140aade9f1ec461bbfe524ddc740bf94")
 BASE_URL = "https://api.football-data.org/v4"

@@ -19,7 +19,9 @@ from collections import defaultdict
 
 import numpy as np
 
-DB_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "soccer.db")
+_here = os.path.dirname(os.path.abspath(__file__))
+_parent = os.path.dirname(_here)
+DB_PATH = os.path.join(_here, "soccer.db") if os.path.exists(os.path.join(_here, "soccer.db")) else os.path.join(_parent, "soccer.db")
 
 
 def get_db():
