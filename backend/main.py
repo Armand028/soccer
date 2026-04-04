@@ -52,9 +52,38 @@ def get_leagues():
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("SELECT DISTINCT league FROM matches ORDER BY league")
-    leagues = [row["league"] for row in cursor.fetchall()]
+    all_leagues = [row["league"] for row in cursor.fetchall()]
     conn.close()
-    return {"leagues": leagues}
+    
+    # Organize leagues by category
+    league_order = [
+        "English Premier League",
+        "Spain laLiga", 
+        "Italy_ Serie A",
+        "Germany Bundesliga 1",
+        "France ligue 1",
+        "UEFA Champions League",
+        "UEFA Europa League",
+        "UEFA Conference League",
+        "FA Cup",
+        "Coppa Italia",
+        "Coupe de France",
+        "Copa del Rey",
+        "DFB-Pokal"
+    ]
+    
+    # Sort: prioritize main leagues, then cups/UEFA
+    ordered_leagues = []
+    for league in league_order:
+        if league in all_leagues:
+            ordered_leagues.append(league)
+    
+    # Add any remaining leagues not in our order list
+    for league in all_leagues:
+        if league not in ordered_leagues:
+            ordered_leagues.append(league)
+    
+    return {"leagues": ordered_leagues}
 
 @app.get("/api/teams")
 def get_teams(league: str = None):
@@ -193,14 +222,22 @@ def get_today_matches(date: str = None):
     end_ts = start_ts + 86400
     conn = get_db()
     cursor = conn.cursor()
-    # Dedup safety: if same teams play on same date from different seasons, keep only the latest season
+    # Improved dedup: Prefer matches with complete data (compatible with database)
+    # Priority: 1) Matches with valid league names (not numeric), 2) Matches with scores for finished games, 3) Higher ID (more recent)
     cursor.execute(f"""
-        SELECT {ALL_MATCH_COLS} FROM matches
+        SELECT {ALL_MATCH_COLS} FROM matches m1
         WHERE kickoff_timestamp >= ? AND kickoff_timestamp < ?
-          AND id IN (
-            SELECT MAX(id) FROM matches 
-            WHERE kickoff_timestamp >= ? AND kickoff_timestamp < ?
-            GROUP BY home_team, away_team, date
+          AND id = (
+            SELECT id FROM matches m2
+            WHERE m2.kickoff_timestamp >= ? AND m2.kickoff_timestamp < ?
+              AND m2.home_team = m1.home_team 
+              AND m2.away_team = m1.away_team 
+              AND m2.date = m1.date
+            ORDER BY 
+              (CASE WHEN m2.league NOT LIKE 'League %' THEN 0 ELSE 1 END),
+              (CASE WHEN m2.home_score >= 0 THEN 0 ELSE 1 END),
+              m2.id DESC
+            LIMIT 1
           )
         ORDER BY kickoff_timestamp ASC
     """, (start_ts, end_ts, start_ts, end_ts))

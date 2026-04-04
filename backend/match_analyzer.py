@@ -158,7 +158,7 @@ def _season_trajectory(records):
 
 # ===== SECTION GENERATORS =====
 
-def _sec_overview(team, f_all, f_venue, lp, split, venue, traj):
+def _sec_overview(team, f_all, f_all_5, f_venue, f_venue_5, lp, split, venue, traj):
     L = []
     if lp:
         gd = lp["gf"]-lp["ga"]
@@ -167,9 +167,19 @@ def _sec_overview(team, f_all, f_venue, lp, split, venue, traj):
         L.append(f"**{team}** — #{lp['position']} ({lp['points']} pts, {lp['won']}W {lp['drawn']}D {lp['lost']}L, GD {gds}, {ppg} ppg)")
     else:
         L.append(f"**{team}** — League position unavailable")
+    # Last 10 form (overall)
     L.append(f"- Overall form (last {f_all['matches_played']}): {_form_label(f_all['percentage'])} ({f_all['percentage']}%) — {f_all['wins']}W {f_all['draws']}D {f_all['losses']}L")
+    # Last 5 form (overall)
+    if f_all_5 and f_all_5['matches_played'] > 0:
+        trend = "↗️" if f_all_5['percentage'] > f_all['percentage'] else "↘️" if f_all_5['percentage'] < f_all['percentage'] else "➡️"
+        L.append(f"- Last 5 games: {_form_label(f_all_5['percentage'])} ({f_all_5['percentage']}%) — {f_all_5['wins']}W {f_all_5['draws']}D {f_all_5['losses']}L {trend}")
+    # Last 10 form (venue)
     if f_venue["matches_played"]>0:
         L.append(f"- {venue} form (last {f_venue['matches_played']}): {_form_label(f_venue['percentage'])} ({f_venue['percentage']}%) — {f_venue['wins']}W {f_venue['draws']}D {f_venue['losses']}L")
+    # Last 5 form (venue)
+    if f_venue_5 and f_venue_5['matches_played'] > 0:
+        trend = "↗️" if f_venue_5['percentage'] > f_venue['percentage'] else "↘️" if f_venue_5['percentage'] < f_venue['percentage'] else "➡️"
+        L.append(f"- Last 5 {venue.lower()}: {_form_label(f_venue_5['percentage'])} ({f_venue_5['percentage']}%) — {f_venue_5['wins']}W {f_venue_5['draws']}D {f_venue_5['losses']}L {trend}")
     s = split["home"] if venue=="Home" else split["away"]
     if s["played"]>0:
         L.append(f"- Last {s['played']} {venue.lower()}: {s['w']}W {s['d']}D {s['l']}L (avg {_sd(s['gf'],s['played']):.2f} GF, {_sd(s['ga'],s['played']):.2f} GA)")
@@ -553,14 +563,14 @@ def _sec_verdict(home, away, xg, sm, fh, fa, fhv, fav, h2h, lph, lpa, sosh, sosa
         fp = p["home_win"] if fav_team == home else p["away_win"]
         L.append(f"A slight lean toward **{fav_team}** ({fp}%), but the margins are thin and upset potential is real.")
 
-    # Goal verdict
+    # Goal verdict - includes Over 1.5 and Over 2.5
     txg = xg["home_xg"]+xg["away_xg"]
     if txg>3.0:
-        L.append(f"\n**Goals:** High expectation ({txg:.2f} combined xG). Over 2.5 at {p['over_2_5']}%.")
+        L.append(f"\n**Goals:** High expectation ({txg:.2f} combined xG). Over 1.5 at {p['over_1_5']}%, Over 2.5 at {p['over_2_5']}%.")
     elif txg<2.0:
         L.append(f"\n**Goals:** Low expectation ({txg:.2f} combined xG). Under 2.5 at {round(100-p['over_2_5'],1)}%.")
     else:
-        L.append(f"\n**Goals:** Moderate ({txg:.2f} combined xG). Over 2.5 at {p['over_2_5']}%.")
+        L.append(f"\n**Goals:** Moderate ({txg:.2f} combined xG). Over 1.5 at {p['over_1_5']}%, Over 2.5 at {p['over_2_5']}%.")
 
     return "\n".join(L)
 
@@ -596,13 +606,15 @@ def generate_match_report(home_team, away_team, league):
     if xg:
         sm = _compute_score_matrix(xg["home_xg"], xg["away_xg"])
 
-    fh = form["home_overall"]; fa = form["away_overall"]
-    fhv = form["home_at_home"]; fav = form["away_at_away"]
+    fh = form["home_overall"]; fh5 = form["home_overall_last5"]
+    fa = form["away_overall"]; fa5 = form["away_overall_last5"]
+    fhv = form["home_at_home"]; fhv5 = form["home_at_home_last5"]
+    fav = form["away_at_away"]; fav5 = form["away_at_away_last5"]
 
     # Build sections
     sec = {}
-    sec["h_overview"] = _sec_overview(home_team, fh, fhv, lp["home"], h_split, "Home", h_traj)
-    sec["a_overview"] = _sec_overview(away_team, fa, fav, lp["away"], a_split, "Away", a_traj)
+    sec["h_overview"] = _sec_overview(home_team, fh, fh5, fhv, fhv5, lp["home"], h_split, "Home", h_traj)
+    sec["a_overview"] = _sec_overview(away_team, fa, fa5, fav, fav5, lp["away"], a_split, "Away", a_traj)
     sec["h_scoring"] = _sec_scoring(home_team, fh, trends["home"])
     sec["a_scoring"] = _sec_scoring(away_team, fa, trends["away"])
     sec["h_momentum"] = _sec_momentum(home_team, fh, trends["home"], h_sos)
@@ -630,10 +642,16 @@ def generate_match_report(home_team, away_team, league):
             ms_lines.append(f"**{name}** across {len(recs)} seasons: {tp} matches — {tw}W {td}D {tl}L, {tgf}GF/{tga}GA")
     sec["multi_season"] = "\n".join(ms_lines) if ms_lines else ""
 
-    # Compose report
+    # Compose report - Analysis & Insights moved to top
     report = f"""# Match Analysis Report
 ## {home_team} vs {away_team}
 ### {league}
+
+---
+
+## Analysis & Insights
+
+{sec["insights"]}
 
 ---
 
@@ -688,12 +706,6 @@ def generate_match_report(home_team, away_team, league):
 ## Multi-Season Context
 
 {sec["multi_season"]}
-
----
-
-## Analysis & Insights
-
-{sec["insights"]}
 
 ---
 

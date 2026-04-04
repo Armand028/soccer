@@ -543,11 +543,15 @@ def generate_full_analysis(home_team, away_team, league):
     Generate a comprehensive match analysis combining all modules.
     This is the main function called by the API for match-level deep analysis.
     """
-    # Forms
-    home_overall = get_team_form(home_team, limit=10)
-    home_home = get_team_form(home_team, limit=10, venue="home")
-    away_overall = get_team_form(away_team, limit=10)
-    away_away = get_team_form(away_team, limit=10, venue="away")
+    # Forms - last 10 and last 5 for detailed comparison
+    home_overall_10 = get_team_form(home_team, limit=10)
+    home_overall_5 = get_team_form(home_team, limit=5)
+    home_home_10 = get_team_form(home_team, limit=10, venue="home")
+    home_home_5 = get_team_form(home_team, limit=5, venue="home")
+    away_overall_10 = get_team_form(away_team, limit=10)
+    away_overall_5 = get_team_form(away_team, limit=5)
+    away_away_10 = get_team_form(away_team, limit=10, venue="away")
+    away_away_5 = get_team_form(away_team, limit=5, venue="away")
 
     # Goal trends
     home_trends = get_goal_trends(home_team, limit=15)
@@ -573,10 +577,14 @@ def generate_full_analysis(home_team, away_team, league):
         "away_team": away_team,
         "league": league,
         "form": {
-            "home_overall": home_overall,
-            "home_at_home": home_home,
-            "away_overall": away_overall,
-            "away_at_away": away_away,
+            "home_overall": home_overall_10,
+            "home_overall_last5": home_overall_5,
+            "home_at_home": home_home_10,
+            "home_at_home_last5": home_home_5,
+            "away_overall": away_overall_10,
+            "away_overall_last5": away_overall_5,
+            "away_at_away": away_away_10,
+            "away_at_away_last5": away_away_5,
         },
         "goal_trends": {
             "home": home_trends,
