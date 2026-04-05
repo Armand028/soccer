@@ -9,6 +9,7 @@ import sqlite3
 import analysis_engine_v2 as v2
 import match_analyzer
 import fetch_sportsdb as sdb
+from fetch_sportsdb import TEAM_NAME_NORMALIZATION
 
 
 @asynccontextmanager
@@ -46,6 +47,26 @@ def get_db():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
+
+def normalize_team_name(name):
+    """Normalize a team name to its canonical form."""
+    if not name:
+        return name
+    return TEAM_NAME_NORMALIZATION.get(name, name)
+
+def normalize_match_teams(match):
+    """Normalize team names in a match dict."""
+    if isinstance(match, dict):
+        if "home_team" in match:
+            match["home_team"] = normalize_team_name(match["home_team"])
+        if "away_team" in match:
+            match["away_team"] = normalize_team_name(match["away_team"])
+    return match
+
+def normalize_matches(matches):
+    """Normalize team names in a list of matches."""
+    return [normalize_match_teams(m) for m in matches]
+
 
 @app.get("/api/leagues")
 def get_leagues():
@@ -190,7 +211,7 @@ def get_recent_matches(limit: int = 50, league: str = None):
                        (limit,))
     matches = _add_ottawa_time([dict(row) for row in cursor.fetchall()])
     conn.close()
-    return {"matches": matches}
+    return {"matches": normalize_matches(matches)}
 
 
 OTTAWA_TZ = ZoneInfo("America/Toronto")
@@ -243,7 +264,7 @@ def get_today_matches(date: str = None):
     """, (start_ts, end_ts, start_ts, end_ts))
     matches = _add_ottawa_time([dict(row) for row in cursor.fetchall()])
     conn.close()
-    return {"date": date, "matches": matches}
+    return {"date": date, "matches": normalize_matches(matches)}
 
 
 @app.get("/api/matches/{match_id}")
@@ -256,7 +277,7 @@ def get_match_by_id(match_id: int):
     conn.close()
     if not row:
         raise HTTPException(status_code=404, detail="Match not found")
-    return _add_ottawa_time([dict(row)])[0]
+    return normalize_match_teams(_add_ottawa_time([dict(row)])[0])
 
 
 @app.get("/api/matches/{match_id}/analysis")
@@ -272,7 +293,7 @@ def get_match_analysis(match_id: int):
     conn.close()
     if not row:
         raise HTTPException(status_code=404, detail="Match not found")
-    match = dict(row)
+    match = normalize_match_teams(dict(row))
     try:
         analysis = v2.generate_full_analysis(match["home_team"], match["away_team"], match["league"])
         analysis["match"] = match
@@ -291,7 +312,7 @@ def get_match_report(match_id: int):
     conn.close()
     if not row:
         raise HTTPException(status_code=404, detail="Match not found")
-    match = dict(row)
+    match = normalize_match_teams(dict(row))
     try:
         result = match_analyzer.generate_match_report(match["home_team"], match["away_team"], match["league"])
         result["match"] = match
