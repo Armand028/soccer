@@ -596,7 +596,7 @@ def _scheduler_loop():
             _refresh_stats["last_error"] = str(e)
             log.error(f"Scheduler error: {e}")
 
-        # Wait ~8.5 seconds before next cycle (7 times per minute)
+        # Wait ~12 seconds before next cycle (5 times per minute)
         for _ in range(12):
             if not _scheduler_running:
                 break
