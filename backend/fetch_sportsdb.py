@@ -15,6 +15,7 @@ import time
 import os
 import sys
 import logging
+import threading
 
 log = logging.getLogger("fetch_sdb")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(message)s")
