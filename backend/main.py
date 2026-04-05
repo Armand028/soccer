@@ -8,16 +8,16 @@ from fastapi.middleware.cors import CORSMiddleware
 import sqlite3
 import analysis_engine_v2 as v2
 import match_analyzer
-import fetch_footballdata as fd
+import fetch_sportsdb as sdb
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: begin auto-refresh (1 API call every 60s for live scores)
-    fd.start_scheduler()
+    # Startup: begin auto-refresh from TheSportsDB only
+    sdb.start_scheduler()
     yield
     # Shutdown: stop the scheduler thread
-    fd.stop_scheduler()
+    sdb.stop_scheduler()
 
 
 app = FastAPI(title="Soccer Bets Analyzer API", lifespan=lifespan)
@@ -329,10 +329,10 @@ def get_league_table(league: str, season: str = None):
 
 @app.get("/api/data/refresh")
 def trigger_daily_refresh():
-    """Trigger an immediate data refresh (fetch today's matches)."""
+    """Trigger an immediate data refresh (fetch today's matches from TheSportsDB)."""
     try:
-        ins, upd, live = fd.fetch_today()
-        return {"status": "ok", "inserted": ins, "updated": upd, "live": live}
+        ins, upd = sdb.fetch_live()
+        return {"status": "ok", "inserted": ins, "updated": upd, "source": "TheSportsDB"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -340,7 +340,7 @@ def trigger_daily_refresh():
 @app.get("/api/data/scheduler")
 def scheduler_status():
     """Return the auto-refresh scheduler status."""
-    return fd.get_scheduler_status()
+    return sdb.get_scheduler_status()
 
 
 if __name__ == "__main__":

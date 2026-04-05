@@ -49,6 +49,249 @@ CUP_LEAGUES = {
     "5071": ("UEFA Conference League", 15),
 }
 
+# Team name normalization (variants → canonical names)
+# Shared across all data sources for consistency
+TEAM_NAME_NORMALIZATION = {
+    # === SPANISH LA LIGA ===
+    "Club Atlético de Madrid": "Atlético Madrid",
+    "Atletico Madrid": "Atlético Madrid",
+    "Real Betis Balompié": "Real Betis",
+    "Betis": "Real Betis",
+    "Real Sociedad de Fútbol": "Real Sociedad",
+    "Sociedad": "Real Sociedad",
+    "Levante UD": "Levante",
+    "RCD Mallorca": "Mallorca",
+    "Real Madrid CF": "Real Madrid",
+    "RCD Espanyol de Barcelona": "Espanyol",
+    "Espanyol Barcelona": "Espanyol",
+    "Espanol": "Espanyol",
+    "FC Barcelona": "Barcelona",
+    "Athletic Bilbao": "Athletic Bilbao",
+    "Ath Bilbao": "Athletic Bilbao",
+    "Ath Madrid": "Atlético Madrid",
+    "Atl. Madrid": "Atlético Madrid",
+    "Alaves": "Deportivo Alavés",
+    "Alavés": "Deportivo Alavés",
+    "Cadiz": "Cádiz CF",
+    "Cadiz CF": "Cádiz CF",
+    "Granada CF": "Granada",
+    "Vallecano": "Rayo Vallecano",
+    "Celta": "Celta Vigo",
+    "Vigo": "Celta Vigo",
+    "Sevilla FC": "Sevilla",
+    "Valencia CF": "Valencia",
+    "Villarreal CF": "Villarreal",
+    "Getafe CF": "Getafe",
+    "Girona FC": "Girona",
+    "Osasuna": "CA Osasuna",
+    "Las Palmas": "UD Las Palmas",
+    "Leganes": "Leganés",
+    "Elche CF": "Elche",
+    "Almeria": "UD Almería",
+    "Almería": "UD Almería",
+    "Huesca": "SD Huesca",
+    "Eibar": "SD Eibar",
+    "Valladolid": "Real Valladolid",
+    "Oviedo": "Real Oviedo",
+
+    # === ENGLISH PREMIER LEAGUE ===
+    "Brighton": "Brighton and Hove Albion",
+    "Leeds": "Leeds United",
+    "Manchester Utd": "Manchester United",
+    "Newcastle": "Newcastle United",
+    "Nottingham": "Nottingham Forest",
+    "Sheffield Utd": "Sheffield United",
+    "Tottenham": "Tottenham Hotspur",
+    "West Ham": "West Ham United",
+    "Wolves": "Wolverhampton Wanderers",
+    "West Brom": "West Bromwich Albion",
+    "Leicester": "Leicester City",
+    "Luton": "Luton Town",
+    "Ipswich": "Ipswich Town",
+    "Norwich": "Norwich City",
+
+    # === GERMAN BUNDESLIGA ===
+    "Augsburg": "FC Augsburg",
+    "Dortmund": "Borussia Dortmund",
+    "B. Monchengladbach": "Borussia Mönchengladbach",
+    "Monchengladbach": "Borussia Mönchengladbach",
+    "Mönchengladbach": "Borussia Mönchengladbach",
+    "Ein Frankfurt": "Eintracht Frankfurt",
+    "FC Koln": "FC Köln",
+    "Hertha": "Hertha Berlin",
+    "Hertha BSC": "Hertha Berlin",
+    "Leverkusen": "Bayer Leverkusen",
+    "Bayer 04 Leverkusen": "Bayer Leverkusen",
+    "Bielefeld": "Arminia Bielefeld",
+    "Schalke": "Schalke 04",
+    "Schalke 04": "Schalke 04",
+    "FC Schalke 04": "Schalke 04",
+    "RasenBallsport Leipzig": "RB Leipzig",
+    "Greuther Furth": "Greuther Fürth",
+    "Greuther Fuerth": "Greuther Fürth",
+    "SPVGG Greuther Fürth": "Greuther Fürth",
+    "Bayern Munich": "Bayern München",
+    "Bayern": "Bayern München",
+    "FC Bayern Munich": "Bayern München",
+    "FC Bayern München": "Bayern München",
+    "Wolfsburg": "VfL Wolfsburg",
+    "VfL Wolfsburg": "VfL Wolfsburg",
+    "Stuttgart": "VfB Stuttgart",
+    "Hoffenheim": "TSG Hoffenheim",
+    "TSG 1899 Hoffenheim": "TSG Hoffenheim",
+    "Freiburg": "SC Freiburg",
+    "Union Berlin": "1. FC Union Berlin",
+    "Werder Bremen": "SV Werder Bremen",
+    "Bremen": "SV Werder Bremen",
+    "Mainz": "1. FSV Mainz 05",
+    "Mainz 05": "1. FSV Mainz 05",
+    "1. FSV Mainz": "1. FSV Mainz 05",
+    "Bochum": "VfL Bochum",
+    "Darmstadt": "SV Darmstadt 98",
+    "Heidenheim": "1. FC Heidenheim",
+    "Heidenheim 1846": "1. FC Heidenheim",
+    "1. FC Heidenheim 1846": "1. FC Heidenheim",
+    "FC Heidenheim": "1. FC Heidenheim",
+    "Hamburg": "Hamburger SV",
+    "Dusseldorf": "Fortuna Düsseldorf",
+    "Fortuna Dusseldorf": "Fortuna Düsseldorf",
+    "St Pauli": "FC St. Pauli",
+    "St. Pauli": "FC St. Pauli",
+    "Hannover": "Hannover 96",
+    "Hannover 96": "Hannover 96",
+    "Kiel": "Holstein Kiel",
+    "Holstein Kiel": "Holstein Kiel",
+    "SV Elversberg": "Elversberg",
+
+    # === ITALIAN SERIE A ===
+    "Inter": "Inter Milan",
+    "FC Internazionale Milano": "Inter Milan",
+    "Internazionale": "Inter Milan",
+    "AC Milan": "Milan",
+    "Milan": "Milan",
+    "Verona": "Hellas Verona",
+    "Hellas": "Hellas Verona",
+    "AS Roma": "Roma",
+    "Roma": "Roma",
+    "Parma": "Parma",
+    "Parma Calcio 1913": "Parma",
+    "Lazio": "Lazio",
+    "SS Lazio": "Lazio",
+    "Napoli": "Napoli",
+    "SSC Napoli": "Napoli",
+    "Juventus": "Juventus",
+    "Juve": "Juventus",
+    "Atalanta": "Atalanta",
+    "Atalanta BC": "Atalanta",
+    "Fiorentina": "Fiorentina",
+    "ACF Fiorentina": "Fiorentina",
+    "Torino": "Torino",
+    "Torino FC": "Torino",
+    "Udinese": "Udinese",
+    "Udinese Calcio": "Udinese",
+    "Bologna": "Bologna",
+    "Bologna FC": "Bologna",
+    "Sassuolo": "Sassuolo",
+    "Sampdoria": "Sampdoria",
+    "Cagliari": "Cagliari",
+    "Cagliari Calcio": "Cagliari",
+    "Genoa": "Genoa",
+    "Genoa CFC": "Genoa",
+    "Empoli": "Empoli",
+    "Empoli FC": "Empoli",
+    "Monza": "Monza",
+    "AC Monza": "Monza",
+    "Salernitana": "Salernitana",
+    "US Salernitana": "Salernitana",
+    "Lecce": "Lecce",
+    "US Lecce": "Lecce",
+    "Spezia": "Spezia",
+    "Spezia Calcio": "Spezia",
+    "Frosinone": "Frosinone",
+    "Frosinone Calcio": "Frosinone",
+    "Cremonese": "Cremonese",
+    "US Cremonese": "Cremonese",
+    "Crotone": "Crotone",
+    "FC Crotone": "Crotone",
+    "Benevento": "Benevento",
+    "Benevento Calcio": "Benevento",
+    "Venezia": "Venezia",
+    "Venezia FC": "Venezia",
+    "Pisa": "Pisa",
+    "Pisa SC": "Pisa",
+    "Como": "Como",
+    "Como 1907": "Como",
+
+    # === FRENCH LIGUE 1 ===
+    "Paris Saint Germain": "Paris Saint-Germain",
+    "Paris S-G": "Paris Saint-Germain",
+    "PSG": "Paris Saint-Germain",
+    "Paris SG": "Paris Saint-Germain",
+    "Paris": "Paris Saint-Germain",
+    "St Etienne": "Saint-Étienne",
+    "Saint-Etienne": "Saint-Étienne",
+    "AS Saint-Étienne": "Saint-Étienne",
+    "Marseille": "Olympique Marseille",
+    "OM": "Olympique Marseille",
+    "Lyon": "Olympique Lyonnais",
+    "Olympique Lyon": "Olympique Lyonnais",
+    "OL": "Olympique Lyonnais",
+    "Clermont": "Clermont Foot",
+    "Clermont Foot 63": "Clermont Foot",
+    "Lens": "Lens",
+    "RC Lens": "Lens",
+    "Lille": "Lille",
+    "LOSC Lille": "Lille",
+    "Monaco": "Monaco",
+    "AS Monaco": "Monaco",
+    "Rennes": "Rennes",
+    "Stade Rennais": "Rennes",
+    "Stade Rennais FC": "Rennes",
+    "Nice": "Nice",
+    "OGC Nice": "Nice",
+    "Strasbourg": "Strasbourg",
+    "RC Strasbourg": "Strasbourg",
+    "RC Strasbourg Alsace": "Strasbourg",
+    "Nantes": "Nantes",
+    "FC Nantes": "Nantes",
+    "Reims": "Reims",
+    "Stade de Reims": "Reims",
+    "Montpellier": "Montpellier",
+    "Montpellier Hérault": "Montpellier",
+    "Montpellier HSC": "Montpellier",
+    "Angers": "Angers",
+    "Angers SCO": "Angers",
+    "Troyes": "Troyes",
+    "ESTAC Troyes": "Troyes",
+    "Lorient": "Lorient",
+    "FC Lorient": "Lorient",
+    "Brest": "Brest",
+    "Stade Brestois": "Brest",
+    "Stade Brestois 29": "Brest",
+    "Metz": "Metz",
+    "FC Metz": "Metz",
+    "Auxerre": "Auxerre",
+    "AJ Auxerre": "Auxerre",
+    "Ajaccio": "AC Ajaccio",
+    "AC Ajaccio": "AC Ajaccio",
+    "Le Havre": "Le Havre",
+    "Havre AC": "Le Havre",
+    "Nimes": "Nîmes",
+    "Nîmes": "Nîmes",
+    "Nîmes Olympique": "Nîmes",
+    "Dijon": "Dijon",
+    "Dijon FCO": "Dijon",
+    "Bordeaux": "Bordeaux",
+    "FC Girondins de Bordeaux": "Bordeaux",
+    "Girondins de Bordeaux": "Bordeaux",
+    "Sochaux": "Sochaux",
+    "FC Sochaux-Montbéliard": "Sochaux",
+    "Grenoble": "Grenoble",
+    "Grenoble Foot": "Grenoble",
+    "Rodez": "Rodez",
+    "Rodez Aveyron": "Rodez",
+}
+
 # Seasons to backfill
 SEASONS = [
     "2020-2021", "2021-2022", "2022-2023",
@@ -101,8 +344,11 @@ def parse_timestamp(ts_str):
 
 def upsert_match(cursor, ev, league_name):
     """Insert or update a match from TheSportsDB event."""
-    home = ev.get("strHomeTeam", "Unknown")
-    away = ev.get("strAwayTeam", "Unknown")
+    raw_home = ev.get("strHomeTeam", "Unknown")
+    raw_away = ev.get("strAwayTeam", "Unknown")
+    # Normalize team names
+    home = TEAM_NAME_NORMALIZATION.get(raw_home, raw_home)
+    away = TEAM_NAME_NORMALIZATION.get(raw_away, raw_away)
     round_str = f"Round {ev.get('intRound', '?')}"
     season = ev.get("strSeason", "")
     date_str = ev.get("dateEvent", "")
@@ -297,6 +543,91 @@ def backfill_cups(season="2025-2026"):
         grand_upd += upd
     log.info(f"=== CUP BACKFILL COMPLETE: {grand_ins} new, {grand_upd} updated ===")
     return grand_ins, grand_upd
+
+
+# ---------------------------------------------------------------------------
+# SMART AUTO-REFRESH (runs as background thread from FastAPI)
+# ---------------------------------------------------------------------------
+# Strategy: fetch live matches every 60 seconds from all leagues
+# TheSportsDB has rate limits but is more generous than Football-Data.org
+# ---------------------------------------------------------------------------
+
+_scheduler_running = False
+_scheduler_thread = None
+_refresh_stats = {"last_refresh": None, "live_count": 0, "total_refreshes": 0, "last_error": None}
+
+
+def _scheduler_loop():
+    """Background loop: fetch live matches every 60 seconds."""
+    global _scheduler_running
+    log.info("TheSportsDB auto-refresh scheduler started (60s interval)")
+
+    cycle = 0
+    while _scheduler_running:
+        cycle += 1
+        try:
+            now = datetime.datetime.utcnow()
+            today = now.strftime("%Y-%m-%d")
+
+            # Fetch recent and upcoming matches from all leagues
+            sdb_ins, sdb_upd = fetch_live(silent=True)
+
+            # Count live matches for today
+            live_count = 0
+            conn = get_db()
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT COUNT(*) FROM matches 
+                WHERE status = 'inprogress' 
+                AND date = ?
+            """, (today,))
+            live_count = cursor.fetchone()[0]
+            conn.close()
+
+            _refresh_stats["last_refresh"] = now.isoformat()
+            _refresh_stats["live_count"] = live_count
+            _refresh_stats["total_refreshes"] = cycle
+
+            if sdb_ins or sdb_upd or live_count:
+                log.info(f"Refresh #{cycle}: {sdb_ins} new, {sdb_upd} updated, {live_count} live")
+
+            _refresh_stats["last_error"] = None
+        except Exception as e:
+            _refresh_stats["last_error"] = str(e)
+            log.error(f"Scheduler error: {e}")
+
+        # Wait ~8.5 seconds before next cycle (7 times per minute)
+        for _ in range(12):
+            if not _scheduler_running:
+                break
+            time.sleep(1)
+
+    log.info("TheSportsDB auto-refresh scheduler stopped")
+
+
+def start_scheduler():
+    """Start the background auto-refresh thread."""
+    global _scheduler_running, _scheduler_thread
+    if _scheduler_running:
+        return
+    _scheduler_running = True
+    _scheduler_thread = threading.Thread(target=_scheduler_loop, daemon=True, name="sdb-scheduler")
+    _scheduler_thread.start()
+
+
+def stop_scheduler():
+    """Stop the background auto-refresh thread."""
+    global _scheduler_running
+    _scheduler_running = False
+
+
+def get_scheduler_status():
+    """Return current scheduler state for the API."""
+    return {
+        "running": _scheduler_running,
+        "source": "TheSportsDB",
+        **_refresh_stats,
+    }
 
 
 # ---------------------------------------------------------------------------
