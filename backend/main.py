@@ -9,16 +9,17 @@ import sqlite3
 import analysis_engine_v2 as v2
 import match_analyzer
 import fetch_sportsdb as sdb
+import fetch_footballdata as fd
 from fetch_sportsdb import TEAM_NAME_NORMALIZATION
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: begin auto-refresh from TheSportsDB only
-    sdb.start_scheduler()
+    # Startup: begin dual-source auto-refresh (Football-Data.org + TheSportsDB)
+    fd.start_scheduler()
     yield
     # Shutdown: stop the scheduler thread
-    sdb.stop_scheduler()
+    fd.stop_scheduler()
 
 
 app = FastAPI(title="Soccer Bets Analyzer API", lifespan=lifespan)
@@ -189,6 +190,30 @@ def get_stats():
     return {"total_matches": total_matches, "total_leagues": total_leagues, "total_teams": total_teams}
 
 
+def _dedup_matches(matches):
+    """Deduplicate matches by (home_team, away_team, date).
+    When duplicates exist (from dual-source fetching), prefer the record with:
+    1) a valid league name (not 'League ...'), 2) scores present, 3) higher id."""
+    seen = {}
+    for m in matches:
+        key = (m["home_team"], m["away_team"], m["date"])
+        if key not in seen:
+            seen[key] = m
+        else:
+            prev = seen[key]
+            def _rank(x):
+                return (
+                    0 if not x["league"].startswith("League ") else 1,
+                    0 if x.get("home_score") is not None and x["home_score"] >= 0 else 1,
+                    -x["id"],  # higher id wins (more recent insert)
+                )
+            if _rank(m) < _rank(prev):
+                seen[key] = m
+    # Preserve original ordering
+    id_order = {m["id"]: i for i, m in enumerate(matches)}
+    return sorted(seen.values(), key=lambda m: id_order.get(m["id"], 0))
+
+
 ALL_MATCH_COLS = """id, league, season, round, date, home_team, away_team,
     home_score, away_score, event_id, status, kickoff_timestamp,
     home_score_ht, away_score_ht,
@@ -202,16 +227,19 @@ ALL_MATCH_COLS = """id, league, season, round, date, home_team, away_team,
 def get_recent_matches(limit: int = 50, league: str = None):
     conn = get_db()
     cursor = conn.cursor()
+    # Fetch more than needed so dedup still yields enough results
+    fetch_limit = limit * 2
     order = "ORDER BY COALESCE(kickoff_timestamp, id) DESC"
     if league:
         cursor.execute(f'SELECT {ALL_MATCH_COLS} FROM matches WHERE league = ? AND home_score >= 0 {order} LIMIT ?',
-                       (league, limit))
+                       (league, fetch_limit))
     else:
         cursor.execute(f'SELECT {ALL_MATCH_COLS} FROM matches WHERE home_score >= 0 {order} LIMIT ?',
-                       (limit,))
-    matches = _add_ottawa_time([dict(row) for row in cursor.fetchall()])
+                       (fetch_limit,))
+    raw = _add_ottawa_time([dict(row) for row in cursor.fetchall()])
     conn.close()
-    return {"matches": normalize_matches(matches)}
+    matches = _dedup_matches(normalize_matches(raw))[:limit]
+    return {"matches": matches}
 
 
 OTTAWA_TZ = ZoneInfo("America/Toronto")
@@ -231,10 +259,10 @@ def _add_ottawa_time(matches: list) -> list:
 
 @app.get("/api/matches/today")
 def get_today_matches(date: str = None):
-    """Return matches for a given date (YYYY-MM-DD, in Ottawa time). Defaults to today in Ottawa."""
+    """Return matches for a given date (YYYY-MM-DD, in Ottawa time). Defaults to today in Ottawa.
+    Dual-source dedup: normalize team names first, then keep the best record per matchup."""
     if not date:
         date = datetime.datetime.now(tz=OTTAWA_TZ).strftime("%Y-%m-%d")
-    # Convert date to start/end epoch anchored in Ottawa timezone
     try:
         dt = datetime.datetime.strptime(date, "%Y-%m-%d").replace(tzinfo=OTTAWA_TZ)
     except ValueError:
@@ -243,28 +271,17 @@ def get_today_matches(date: str = None):
     end_ts = start_ts + 86400
     conn = get_db()
     cursor = conn.cursor()
-    # Improved dedup: Prefer matches with complete data (compatible with database)
-    # Priority: 1) Matches with valid league names (not numeric), 2) Matches with scores for finished games, 3) Higher ID (more recent)
     cursor.execute(f"""
-        SELECT {ALL_MATCH_COLS} FROM matches m1
+        SELECT {ALL_MATCH_COLS} FROM matches
         WHERE kickoff_timestamp >= ? AND kickoff_timestamp < ?
-          AND id = (
-            SELECT id FROM matches m2
-            WHERE m2.kickoff_timestamp >= ? AND m2.kickoff_timestamp < ?
-              AND m2.home_team = m1.home_team 
-              AND m2.away_team = m1.away_team 
-              AND m2.date = m1.date
-            ORDER BY 
-              (CASE WHEN m2.league NOT LIKE 'League %' THEN 0 ELSE 1 END),
-              (CASE WHEN m2.home_score >= 0 THEN 0 ELSE 1 END),
-              m2.id DESC
-            LIMIT 1
-          )
-        ORDER BY kickoff_timestamp ASC
-    """, (start_ts, end_ts, start_ts, end_ts))
-    matches = _add_ottawa_time([dict(row) for row in cursor.fetchall()])
+        ORDER BY kickoff_timestamp ASC, id DESC
+    """, (start_ts, end_ts))
+    raw = _add_ottawa_time([dict(row) for row in cursor.fetchall()])
     conn.close()
-    return {"date": date, "matches": normalize_matches(matches)}
+
+    # Normalize team names then deduplicate across sources
+    matches = _dedup_matches(normalize_matches(raw))
+    return {"date": date, "matches": matches}
 
 
 @app.get("/api/matches/{match_id}")
@@ -350,10 +367,19 @@ def get_league_table(league: str, season: str = None):
 
 @app.get("/api/data/refresh")
 def trigger_daily_refresh():
-    """Trigger an immediate data refresh (fetch today's matches from TheSportsDB)."""
+    """Trigger an immediate data refresh from both sources."""
     try:
-        ins, upd = sdb.fetch_live()
-        return {"status": "ok", "inserted": ins, "updated": upd, "source": "TheSportsDB"}
+        fd_ins, fd_upd, _live = fd.fetch_today(silent=True)
+        sdb_ins, sdb_upd = sdb.fetch_live(silent=True)
+        return {
+            "status": "ok",
+            "inserted": fd_ins + sdb_ins,
+            "updated": fd_upd + sdb_upd,
+            "sources": {
+                "football_data": {"inserted": fd_ins, "updated": fd_upd},
+                "thesportsdb": {"inserted": sdb_ins, "updated": sdb_upd},
+            },
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -361,7 +387,7 @@ def trigger_daily_refresh():
 @app.get("/api/data/scheduler")
 def scheduler_status():
     """Return the auto-refresh scheduler status."""
-    return sdb.get_scheduler_status()
+    return fd.get_scheduler_status()
 
 
 if __name__ == "__main__":
