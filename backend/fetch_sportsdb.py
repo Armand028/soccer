@@ -117,6 +117,7 @@ TEAM_NAME_NORMALIZATION = {
     "B. Monchengladbach": "Borussia Mönchengladbach",
     "Monchengladbach": "Borussia Mönchengladbach",
     "Mönchengladbach": "Borussia Mönchengladbach",
+    "Gladbach": "Borussia Mönchengladbach",
     "Ein Frankfurt": "Eintracht Frankfurt",
     "FC Koln": "FC Köln",
     "Hertha": "Hertha Berlin",
