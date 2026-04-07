@@ -22,7 +22,7 @@ BASE_URL = f"https://{RAPID_API_HOST}/api/v1"
 TOURNAMENTS = {
     17: "English Premier League",
     8: "Spain laLiga",
-    23: "Italy_ Serie A",
+    23: "Italian Serie A",
     35: "Germany Bundesliga 1",
     34: "France ligue 1",
     7: "UEFA Champions League",

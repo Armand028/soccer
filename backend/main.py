@@ -1,7 +1,6 @@
 import os
 import time
 import datetime
-from zoneinfo import ZoneInfo
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -10,7 +9,7 @@ import analysis_engine_v2 as v2
 import match_analyzer
 import fetch_sportsdb as sdb
 import fetch_footballdata as fd
-from fetch_sportsdb import TEAM_NAME_NORMALIZATION
+from normalize import TEAM_NAME_NORMALIZATION, normalize_team, validate_date, OTTAWA_TZ
 
 
 @asynccontextmanager
@@ -49,19 +48,13 @@ def get_db():
     conn.row_factory = sqlite3.Row
     return conn
 
-def normalize_team_name(name):
-    """Normalize a team name to its canonical form."""
-    if not name:
-        return name
-    return TEAM_NAME_NORMALIZATION.get(name, name)
-
 def normalize_match_teams(match):
     """Normalize team names in a match dict."""
     if isinstance(match, dict):
         if "home_team" in match:
-            match["home_team"] = normalize_team_name(match["home_team"])
+            match["home_team"] = normalize_team(match["home_team"])
         if "away_team" in match:
-            match["away_team"] = normalize_team_name(match["away_team"])
+            match["away_team"] = normalize_team(match["away_team"])
     return match
 
 def normalize_matches(matches):
@@ -81,7 +74,7 @@ def get_leagues():
     league_order = [
         "English Premier League",
         "Spain laLiga", 
-        "Italy_ Serie A",
+        "Italian Serie A",
         "Germany Bundesliga 1",
         "France ligue 1",
         "UEFA Champions League",
@@ -134,6 +127,8 @@ def get_teams(league: str = None):
 @app.get("/api/analysis/predict")
 def predict_match(home_team: str, away_team: str, league: str):
     """Match prediction using v2 engine for consistency with the rest of the app."""
+    home_team = normalize_team(home_team)
+    away_team = normalize_team(away_team)
     try:
         analysis = v2.generate_full_analysis(home_team, away_team, league)
         xg = analysis["expected_goals"]
@@ -158,6 +153,8 @@ def predict_match(home_team: str, away_team: str, league: str):
 
 @app.get("/api/analysis/h2h")
 def get_h2h(team_a: str, team_b: str):
+    team_a = normalize_team(team_a)
+    team_b = normalize_team(team_b)
     try:
         return v2.get_h2h(team_a, team_b, limit=10)
     except Exception as e:
@@ -165,6 +162,7 @@ def get_h2h(team_a: str, team_b: str):
 
 @app.get("/api/analysis/form")
 def get_form(team: str, limit: int = 10):
+    team = normalize_team(team)
     try:
         return v2.get_team_form(team, limit=limit)
     except Exception as e:
@@ -240,9 +238,6 @@ def get_recent_matches(limit: int = 50, league: str = None):
     conn.close()
     matches = _dedup_matches(normalize_matches(raw))[:limit]
     return {"matches": matches}
-
-
-OTTAWA_TZ = ZoneInfo("America/Toronto")
 
 
 def _add_ottawa_time(matches: list) -> list:
@@ -341,6 +336,8 @@ def get_match_report(match_id: int):
 @app.get("/api/analysis/report")
 def get_analysis_report(home_team: str, away_team: str, league: str):
     """Generate an intelligent match report for an arbitrary matchup."""
+    home_team = normalize_team(home_team)
+    away_team = normalize_team(away_team)
     try:
         return match_analyzer.generate_match_report(home_team, away_team, league)
     except Exception as e:
@@ -350,6 +347,8 @@ def get_analysis_report(home_team: str, away_team: str, league: str):
 @app.get("/api/analysis/full")
 def get_full_analysis(home_team: str, away_team: str, league: str):
     """Deep analysis for an arbitrary home/away matchup."""
+    home_team = normalize_team(home_team)
+    away_team = normalize_team(away_team)
     try:
         return v2.generate_full_analysis(home_team, away_team, league)
     except Exception as e:

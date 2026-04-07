@@ -17,6 +17,7 @@ import os
 import sys
 import threading
 import logging
+from normalize import TEAM_NAME_NORMALIZATION, normalize_team, validate_date, fix_date, utc_to_ottawa, ottawa_now, ottawa_today, OTTAWA_TZ
 
 log = logging.getLogger("fetch_fd")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(message)s")
@@ -32,7 +33,7 @@ BASE_URL = "https://api.football-data.org/v4"
 COMPETITIONS = {
     "PL":  "English Premier League",
     "PD":  "Spain laLiga",
-    "SA":  "Italy_ Serie A",
+    "SA":  "Italian Serie A",
     "BL1": "Germany Bundesliga 1",
     "FL1": "France ligue 1",
     "CL":  "UEFA Champions League",
@@ -43,248 +44,6 @@ COMPETITIONS = {
     "CI":  "Coppa Italia",
     "DFB": "DFB-Pokal",
     "FRA_CUP": "Coupe de France",
-}
-
-# Team name normalization (variants → canonical names)
-TEAM_NAME_NORMALIZATION = {
-    # === SPANISH LA LIGA ===
-    "Club Atlético de Madrid": "Atlético Madrid",
-    "Atletico Madrid": "Atlético Madrid",
-    "Real Betis Balompié": "Real Betis",
-    "Betis": "Real Betis",
-    "Real Sociedad de Fútbol": "Real Sociedad",
-    "Sociedad": "Real Sociedad",
-    "Levante UD": "Levante",
-    "RCD Mallorca": "Mallorca",
-    "Real Madrid CF": "Real Madrid",
-    "RCD Espanyol de Barcelona": "Espanyol",
-    "Espanyol Barcelona": "Espanyol",
-    "Espanol": "Espanyol",
-    "FC Barcelona": "Barcelona",
-    "Athletic Bilbao": "Athletic Bilbao",
-    "Ath Bilbao": "Athletic Bilbao",
-    "Ath Madrid": "Atlético Madrid",
-    "Atl. Madrid": "Atlético Madrid",
-    "Alaves": "Deportivo Alavés",
-    "Alavés": "Deportivo Alavés",
-    "Cadiz": "Cádiz CF",
-    "Cadiz CF": "Cádiz CF",
-    "Granada CF": "Granada",
-    "Vallecano": "Rayo Vallecano",
-    "Celta": "Celta Vigo",
-    "Vigo": "Celta Vigo",
-    "Sevilla FC": "Sevilla",
-    "Valencia CF": "Valencia",
-    "Villarreal CF": "Villarreal",
-    "Getafe CF": "Getafe",
-    "Girona FC": "Girona",
-    "Osasuna": "CA Osasuna",
-    "Las Palmas": "UD Las Palmas",
-    "Leganes": "Leganés",
-    "Elche CF": "Elche",
-    "Almeria": "UD Almería",
-    "Almería": "UD Almería",
-    "Huesca": "SD Huesca",
-    "Eibar": "SD Eibar",
-    "Valladolid": "Real Valladolid",
-    "Oviedo": "Real Oviedo",
-
-    # === ENGLISH PREMIER LEAGUE ===
-    "Brighton": "Brighton and Hove Albion",
-    "Leeds": "Leeds United",
-    "Manchester Utd": "Manchester United",
-    "Newcastle": "Newcastle United",
-    "Nottingham": "Nottingham Forest",
-    "Sheffield Utd": "Sheffield United",
-    "Tottenham": "Tottenham Hotspur",
-    "West Ham": "West Ham United",
-    "Wolves": "Wolverhampton Wanderers",
-    "West Brom": "West Bromwich Albion",
-    "Leicester": "Leicester City",
-    "Luton": "Luton Town",
-    "Ipswich": "Ipswich Town",
-    "Norwich": "Norwich City",
-
-    # === GERMAN BUNDESLIGA ===
-    "Augsburg": "FC Augsburg",
-    "Dortmund": "Borussia Dortmund",
-    "B. Monchengladbach": "Borussia Mönchengladbach",
-    "Monchengladbach": "Borussia Mönchengladbach",
-    "Mönchengladbach": "Borussia Mönchengladbach",
-    "Ein Frankfurt": "Eintracht Frankfurt",
-    "FC Koln": "FC Köln",
-    "Hertha": "Hertha Berlin",
-    "Hertha BSC": "Hertha Berlin",
-    "Leverkusen": "Bayer Leverkusen",
-    "Bayer 04 Leverkusen": "Bayer Leverkusen",
-    "Bielefeld": "Arminia Bielefeld",
-    "Schalke": "Schalke 04",
-    "Schalke 04": "Schalke 04",
-    "FC Schalke 04": "Schalke 04",
-    "RasenBallsport Leipzig": "RB Leipzig",
-    "Greuther Furth": "Greuther Fürth",
-    "Greuther Fuerth": "Greuther Fürth",
-    "SPVGG Greuther Fürth": "Greuther Fürth",
-    "Bayern Munich": "Bayern München",
-    "Bayern": "Bayern München",
-    "FC Bayern Munich": "Bayern München",
-    "FC Bayern München": "Bayern München",
-    "Wolfsburg": "VfL Wolfsburg",
-    "VfL Wolfsburg": "VfL Wolfsburg",
-    "Stuttgart": "VfB Stuttgart",
-    "Hoffenheim": "TSG Hoffenheim",
-    "TSG 1899 Hoffenheim": "TSG Hoffenheim",
-    "Freiburg": "SC Freiburg",
-    "Union Berlin": "1. FC Union Berlin",
-    "Werder Bremen": "SV Werder Bremen",
-    "Bremen": "SV Werder Bremen",
-    "Mainz": "1. FSV Mainz 05",
-    "Mainz 05": "1. FSV Mainz 05",
-    "1. FSV Mainz": "1. FSV Mainz 05",
-    "Bochum": "VfL Bochum",
-    "Darmstadt": "SV Darmstadt 98",
-    "Heidenheim": "1. FC Heidenheim",
-    "Heidenheim 1846": "1. FC Heidenheim",
-    "1. FC Heidenheim 1846": "1. FC Heidenheim",
-    "FC Heidenheim": "1. FC Heidenheim",
-    "Hamburg": "Hamburger SV",
-    "Dusseldorf": "Fortuna Düsseldorf",
-    "Fortuna Dusseldorf": "Fortuna Düsseldorf",
-    "St Pauli": "FC St. Pauli",
-    "St. Pauli": "FC St. Pauli",
-    "Hannover": "Hannover 96",
-    "Hannover 96": "Hannover 96",
-    "Kiel": "Holstein Kiel",
-    "Holstein Kiel": "Holstein Kiel",
-    "SV Elversberg": "Elversberg",
-
-    # === ITALIAN SERIE A ===
-    "Inter": "Inter Milan",
-    "FC Internazionale Milano": "Inter Milan",
-    "Internazionale": "Inter Milan",
-    "AC Milan": "Milan",
-    "Milan": "Milan",
-    "Verona": "Hellas Verona",
-    "Hellas": "Hellas Verona",
-    "AS Roma": "Roma",
-    "Roma": "Roma",
-    "Parma": "Parma",
-    "Parma Calcio 1913": "Parma",
-    "Lazio": "Lazio",
-    "SS Lazio": "Lazio",
-    "Napoli": "Napoli",
-    "SSC Napoli": "Napoli",
-    "Juventus": "Juventus",
-    "Juve": "Juventus",
-    "Atalanta": "Atalanta",
-    "Atalanta BC": "Atalanta",
-    "Fiorentina": "Fiorentina",
-    "ACF Fiorentina": "Fiorentina",
-    "Torino": "Torino",
-    "Torino FC": "Torino",
-    "Udinese": "Udinese",
-    "Udinese Calcio": "Udinese",
-    "Bologna": "Bologna",
-    "Bologna FC": "Bologna",
-    "Sassuolo": "Sassuolo",
-    "Sampdoria": "Sampdoria",
-    "Cagliari": "Cagliari",
-    "Cagliari Calcio": "Cagliari",
-    "Genoa": "Genoa",
-    "Genoa CFC": "Genoa",
-    "Empoli": "Empoli",
-    "Empoli FC": "Empoli",
-    "Monza": "Monza",
-    "AC Monza": "Monza",
-    "Salernitana": "Salernitana",
-    "US Salernitana": "Salernitana",
-    "Lecce": "Lecce",
-    "US Lecce": "Lecce",
-    "Spezia": "Spezia",
-    "Spezia Calcio": "Spezia",
-    "Frosinone": "Frosinone",
-    "Frosinone Calcio": "Frosinone",
-    "Cremonese": "Cremonese",
-    "US Cremonese": "Cremonese",
-    "Crotone": "Crotone",
-    "FC Crotone": "Crotone",
-    "Benevento": "Benevento",
-    "Benevento Calcio": "Benevento",
-    "Venezia": "Venezia",
-    "Venezia FC": "Venezia",
-    "Pisa": "Pisa",
-    "Pisa SC": "Pisa",
-    "Como": "Como",
-    "Como 1907": "Como",
-
-    # === FRENCH LIGUE 1 ===
-    "Paris Saint Germain": "Paris Saint-Germain",
-    "Paris S-G": "Paris Saint-Germain",
-    "PSG": "Paris Saint-Germain",
-    "Paris SG": "Paris Saint-Germain",
-    "Paris": "Paris Saint-Germain",
-    "St Etienne": "Saint-Étienne",
-    "Saint-Etienne": "Saint-Étienne",
-    "AS Saint-Étienne": "Saint-Étienne",
-    "Marseille": "Olympique Marseille",
-    "OM": "Olympique Marseille",
-    "Lyon": "Olympique Lyonnais",
-    "Olympique Lyon": "Olympique Lyonnais",
-    "OL": "Olympique Lyonnais",
-    "Clermont": "Clermont Foot",
-    "Clermont Foot 63": "Clermont Foot",
-    "Lens": "Lens",
-    "RC Lens": "Lens",
-    "Lille": "Lille",
-    "LOSC Lille": "Lille",
-    "Monaco": "Monaco",
-    "AS Monaco": "Monaco",
-    "Rennes": "Rennes",
-    "Stade Rennais": "Rennes",
-    "Stade Rennais FC": "Rennes",
-    "Nice": "Nice",
-    "OGC Nice": "Nice",
-    "Strasbourg": "Strasbourg",
-    "RC Strasbourg": "Strasbourg",
-    "RC Strasbourg Alsace": "Strasbourg",
-    "Nantes": "Nantes",
-    "FC Nantes": "Nantes",
-    "Reims": "Reims",
-    "Stade de Reims": "Reims",
-    "Montpellier": "Montpellier",
-    "Montpellier Hérault": "Montpellier",
-    "Montpellier HSC": "Montpellier",
-    "Angers": "Angers",
-    "Angers SCO": "Angers",
-    "Troyes": "Troyes",
-    "ESTAC Troyes": "Troyes",
-    "Lorient": "Lorient",
-    "FC Lorient": "Lorient",
-    "Brest": "Brest",
-    "Stade Brestois": "Brest",
-    "Stade Brestois 29": "Brest",
-    "Metz": "Metz",
-    "FC Metz": "Metz",
-    "Auxerre": "Auxerre",
-    "AJ Auxerre": "Auxerre",
-    "Ajaccio": "AC Ajaccio",
-    "AC Ajaccio": "AC Ajaccio",
-    "Le Havre": "Le Havre",
-    "Havre AC": "Le Havre",
-    "Nimes": "Nîmes",
-    "Nîmes": "Nîmes",
-    "Nîmes Olympique": "Nîmes",
-    "Dijon": "Dijon",
-    "Dijon FCO": "Dijon",
-    "Bordeaux": "Bordeaux",
-    "FC Girondins de Bordeaux": "Bordeaux",
-    "Girondins de Bordeaux": "Bordeaux",
-    "Sochaux": "Sochaux",
-    "FC Sochaux-Montbéliard": "Sochaux",
-    "Grenoble": "Grenoble",
-    "Grenoble Foot": "Grenoble",
-    "Rodez": "Rodez",
-    "Rodez Aveyron": "Rodez",
 }
 
 # Seasons to backfill — free tier only allows current season
@@ -333,16 +92,6 @@ def api_get(endpoint):
     return resp.json()
 
 
-def parse_utc_date(date_str):
-    if not date_str:
-        return None
-    try:
-        dt = datetime.datetime.fromisoformat(date_str.replace("Z", "+00:00"))
-        return int(dt.timestamp())
-    except Exception:
-        return None
-
-
 # ---------------------------------------------------------------------------
 # Upsert
 # ---------------------------------------------------------------------------
@@ -350,11 +99,10 @@ def upsert_match(cursor, m, league_name, season_str):
     """Insert or update a match from Football-Data.org response."""
     raw_home = m.get("homeTeam", {}).get("name", "Unknown")
     raw_away = m.get("awayTeam", {}).get("name", "Unknown")
-    # Normalize team names
-    home = TEAM_NAME_NORMALIZATION.get(raw_home, raw_home)
-    away = TEAM_NAME_NORMALIZATION.get(raw_away, raw_away)
+    home = normalize_team(raw_home)
+    away = normalize_team(raw_away)
     matchday = m.get("matchday", "?")
-    kickoff = parse_utc_date(m.get("utcDate"))
+    kickoff, ottawa_date = utc_to_ottawa(m.get("utcDate"))
 
     status_map = {
         "FINISHED": "finished", "TIMED": "notstarted", "SCHEDULED": "notstarted",
@@ -387,9 +135,30 @@ def upsert_match(cursor, m, league_name, season_str):
               fd_id, status, home_score, away_score))
         return "updated" if cursor.rowcount > 0 else "unchanged"
 
-    date_str = ""
-    if kickoff:
-        date_str = datetime.datetime.fromtimestamp(kickoff).strftime("%Y-%m-%d")
+    date_str = ottawa_date if ottawa_date else fix_date("", season=season_str, kickoff_epoch=kickoff)
+
+    # Cross-source dedup: check if this match already exists by team+date+league
+    if date_str:
+        cursor.execute("""
+            SELECT id FROM matches
+            WHERE home_team = ? AND away_team = ? AND date = ? AND league = ?
+        """, (home, away, date_str, league_name))
+        dup = cursor.fetchone()
+        if dup:
+            cursor.execute("""
+                UPDATE matches SET
+                    event_id = COALESCE(event_id, ?),
+                    status = COALESCE(?, status),
+                    kickoff_timestamp = COALESCE(?, kickoff_timestamp),
+                    home_score = CASE WHEN ? >= 0 THEN ? ELSE home_score END,
+                    away_score = CASE WHEN ? >= 0 THEN ? ELSE away_score END,
+                    home_score_ht = COALESCE(?, home_score_ht),
+                    away_score_ht = COALESCE(?, away_score_ht)
+                WHERE id = ?
+            """, (fd_id, status, kickoff,
+                  home_score, home_score, away_score, away_score,
+                  home_ht, away_ht, dup["id"]))
+            return "linked"
 
     cursor.execute("""
         INSERT OR IGNORE INTO matches
@@ -409,7 +178,7 @@ def fetch_today(date_str=None, silent=False):
     """Fetch all matches for a date across tracked leagues. Returns counts."""
     global _live_matches_active
     if not date_str:
-        date_str = datetime.datetime.utcnow().strftime("%Y-%m-%d")
+        date_str = ottawa_today()
     if not silent:
         log.info(f"Fetching matches for {date_str}")
     data = api_get(f"/matches?date={date_str}")
@@ -535,7 +304,7 @@ def _scheduler_loop():
     while _scheduler_running:
         cycle += 1
         try:
-            now = datetime.datetime.utcnow()
+            now = ottawa_now()
             today = now.strftime("%Y-%m-%d")
 
             # 1. Football-Data.org: fetch today's matches (1 req/min)
