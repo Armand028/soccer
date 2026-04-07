@@ -293,6 +293,24 @@ TEAM_NAME_NORMALIZATION = {
     "PAE Olympiakos SFP": "Olympiakos",
     "Zrinjski": "Zrinjski Mostar",
     "KuPS Kuopio": "KuPS",
+
+    # === Football-Data.org formal names (from standings pull) ===
+    "AFC Bournemouth": "Bournemouth",
+    "Aston Villa FC": "Aston Villa",
+    "Brentford FC": "Brentford",
+    "Brighton & Hove Albion FC": "Brighton and Hove Albion",
+    "Burnley FC": "Burnley",
+    "Crystal Palace FC": "Crystal Palace",
+    "Everton FC": "Everton",
+    "Fulham FC": "Fulham",
+    "Leeds United FC": "Leeds United",
+    "Manchester United FC": "Manchester United",
+    "Nottingham Forest FC": "Nottingham Forest",
+    "Sunderland AFC": "Sunderland",
+    "Toulouse FC": "Toulouse",
+    "West Ham United FC": "West Ham United",
+    "Wolverhampton Wanderers FC": "Wolverhampton Wanderers",
+    "Rayo Vallecano de Madrid": "Rayo Vallecano",
 }
 
 # Valid date pattern
