@@ -122,25 +122,48 @@ def _get_strength_of_schedule(team, table):
     return {"avg_opp_position":round(avg,1),"top_half_pct":top_pct,"difficulty":diff}
 
 
-def _compute_score_matrix(home_xg, away_xg, mx=8):
+def _compute_score_matrix(home_xg, away_xg, model_params=None, mx=8):
+    """Build score matrix using ensemble model (Poisson + Dixon-Coles + NegBin + ZIP).
+    Falls back to plain Poisson if model_params is None."""
     probs = defaultdict(float)
     exact = []
-    for i in range(mx):
-        for j in range(mx):
-            p = _poisson(home_xg,i)*_poisson(away_xg,j)
-            exact.append((i,j,p))
-            if i>j: probs["home_win"]+=p
-            elif i==j: probs["draw"]+=p
-            else: probs["away_win"]+=p
-            t=i+j
-            if t>=1: probs["over_0_5"]+=p
-            if t>=2: probs["over_1_5"]+=p
-            if t>=3: probs["over_2_5"]+=p
-            if t>=4: probs["over_3_5"]+=p
-            if t>=5: probs["over_4_5"]+=p
-            if i>0 and j>0: probs["btts_yes"]+=p
-            if i==0: probs["away_cs"]+=p
-            if j==0: probs["home_cs"]+=p
+
+    if model_params:
+        matrix = v2.ensemble_score_matrix(home_xg, away_xg, model_params, mx=mx)
+        for i in range(mx):
+            for j in range(mx):
+                p = matrix[i][j]
+                exact.append((i,j,p))
+                if i>j: probs["home_win"]+=p
+                elif i==j: probs["draw"]+=p
+                else: probs["away_win"]+=p
+                t=i+j
+                if t>=1: probs["over_0_5"]+=p
+                if t>=2: probs["over_1_5"]+=p
+                if t>=3: probs["over_2_5"]+=p
+                if t>=4: probs["over_3_5"]+=p
+                if t>=5: probs["over_4_5"]+=p
+                if i>0 and j>0: probs["btts_yes"]+=p
+                if i==0: probs["away_cs"]+=p
+                if j==0: probs["home_cs"]+=p
+    else:
+        for i in range(mx):
+            for j in range(mx):
+                p = _poisson(home_xg,i)*_poisson(away_xg,j)
+                exact.append((i,j,p))
+                if i>j: probs["home_win"]+=p
+                elif i==j: probs["draw"]+=p
+                else: probs["away_win"]+=p
+                t=i+j
+                if t>=1: probs["over_0_5"]+=p
+                if t>=2: probs["over_1_5"]+=p
+                if t>=3: probs["over_2_5"]+=p
+                if t>=4: probs["over_3_5"]+=p
+                if t>=5: probs["over_4_5"]+=p
+                if i>0 and j>0: probs["btts_yes"]+=p
+                if i==0: probs["away_cs"]+=p
+                if j==0: probs["home_cs"]+=p
+
     exact.sort(key=lambda x:x[2], reverse=True)
     return {
         "probs":{k:round(v*100,2) for k,v in probs.items()},
@@ -264,7 +287,7 @@ def _sec_h2h(h2h, home, away):
 
 
 def _sec_scores(home, away, sm):
-    L = ["**Most Likely Exact Scores (Poisson):**",""]
+    L = ["**Most Likely Exact Scores (Ensemble Model):**",""]
     L.append("| Score | Prob |")
     L.append("|-------|------|")
     for h,a,pct in sm["top_scores"][:8]:
@@ -329,7 +352,7 @@ def _sec_insights(home, away, xg, sm, fh, fa, fhv, fav, h2h, th, ta, ph, pa, lph
     outs = [(p["home_win"],f"{home} Win","hw"),(p["draw"],"Draw","d"),(p["away_win"],f"{away} Win","aw")]
     outs.sort(key=lambda x:x[0], reverse=True)
     m1,m2 = outs[0],outs[1]
-    I.append(f"**Match Outcome:** Poisson model projects **{m1[1]}** as most probable at **{m1[0]}%**, "
+    I.append(f"**Match Outcome:** Ensemble model projects **{m1[1]}** as most probable at **{m1[0]}%**, "
              f"followed by {m2[1]} at {m2[0]}%. Distribution: {home} {p['home_win']}% / Draw {p['draw']}% / {away} {p['away_win']}%.")
     margin = m1[0]-m2[0]
     if margin<8:
@@ -486,7 +509,7 @@ def _sec_verdict(home, away, xg, sm, fh, fa, fhv, fav, h2h, lph, lpa, sosh, sosa
         W["draw"] += weight * d_share
         W[away] += weight * a_share
 
-    # Signal 1: Poisson model (weight 3.0) — use actual model probabilities directly
+    # Signal 1: Ensemble model (weight 3.0) — use actual model probabilities directly
     ptot = p["home_win"] + p["draw"] + p["away_win"]
     if ptot > 0:
         _add(3.0, p["home_win"]/ptot, p["draw"]/ptot, p["away_win"]/ptot)
@@ -601,10 +624,11 @@ def generate_match_report(home_team, away_team, league):
     h_sos = _get_strength_of_schedule(home_team, table)
     a_sos = _get_strength_of_schedule(away_team, table)
 
-    # Score matrix
+    # Score matrix (ensemble if model_params available, else plain Poisson)
     sm = None
     if xg:
-        sm = _compute_score_matrix(xg["home_xg"], xg["away_xg"])
+        mp = xg.get("model_params")
+        sm = _compute_score_matrix(xg["home_xg"], xg["away_xg"], model_params=mp)
 
     fh = form["home_overall"]; fh5 = form["home_overall_last5"]
     fa = form["away_overall"]; fa5 = form["away_overall_last5"]
@@ -712,7 +736,7 @@ def generate_match_report(home_team, away_team, league):
 {sec["verdict"]}
 
 ---
-*Report generated from {len(h_seasons)+len(a_seasons)} seasons of data using Poisson modeling, weighted multi-factor analysis, and pattern detection. All outputs are probability-based — not deterministic predictions.*
+*Report generated from {len(h_seasons)+len(a_seasons)} seasons of data using ensemble modeling (Poisson + Dixon-Coles + Negative Binomial + Zero-Inflated Poisson), weighted multi-factor analysis, and pattern detection. All outputs are probability-based — not deterministic predictions.*
 """
 
     return {"report": report, "sections": sec, "analysis": analysis}

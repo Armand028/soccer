@@ -35,7 +35,156 @@ def safe_div(a, b, default=0.0):
 
 
 def poisson_prob(lam, k):
+    if lam <= 0:
+        return 1.0 if k == 0 else 0.0
     return (math.exp(-lam) * (lam ** k)) / math.factorial(k)
+
+
+# ---------------------------------------------------------------------------
+# ADDITIONAL DISTRIBUTION MODELS
+# ---------------------------------------------------------------------------
+
+def _dixon_coles_tau(i, j, lam1, lam2, rho):
+    """Dixon-Coles correction factor for low-scoring outcomes."""
+    if i == 0 and j == 0:
+        return 1.0 - lam1 * lam2 * rho
+    elif i == 1 and j == 0:
+        return 1.0 + lam2 * rho
+    elif i == 0 and j == 1:
+        return 1.0 + lam1 * rho
+    elif i == 1 and j == 1:
+        return 1.0 - rho
+    return 1.0
+
+
+def dixon_coles_prob(lam1, lam2, rho, i, j):
+    """Joint P(home=i, away=j) under Dixon-Coles (Poisson + low-score correlation)."""
+    tau = _dixon_coles_tau(i, j, lam1, lam2, rho)
+    return poisson_prob(lam1, i) * poisson_prob(lam2, j) * max(tau, 0.0)
+
+
+def negbin_prob(mu, r, k):
+    """Negative Binomial P(X=k) with mean mu and dispersion r.
+    As r -> inf this converges to Poisson(mu).  Uses log-gamma for stability."""
+    if mu <= 0:
+        return 1.0 if k == 0 else 0.0
+    if r is None or r <= 0:
+        return poisson_prob(mu, k)
+    p = r / (r + mu)
+    log_p = (math.lgamma(k + r) - math.lgamma(k + 1) - math.lgamma(r)
+             + r * math.log(p) + k * math.log(max(1 - p, 1e-15)))
+    return math.exp(log_p)
+
+
+def zip_prob(lam, pi_zero, k):
+    """Zero-Inflated Poisson: extra mass at zero to handle 0-0 excess."""
+    if pi_zero is None:
+        pi_zero = 0.0
+    if k == 0:
+        return pi_zero + (1.0 - pi_zero) * math.exp(-max(lam, 0))
+    return (1.0 - pi_zero) * poisson_prob(lam, k)
+
+
+# ---------------------------------------------------------------------------
+# PARAMETER ESTIMATION FROM LEAGUE DATA
+# ---------------------------------------------------------------------------
+
+def _estimate_rho(league_matches, avg_hg, avg_ag):
+    """Estimate Dixon-Coles rho from observed vs expected draw rate.
+    Negative rho -> positive correlation of low scores -> more draws."""
+    if not league_matches or len(league_matches) < 20:
+        return -0.05
+    n = len(league_matches)
+    obs_draws = sum(1 for m in league_matches
+                    if m["home_score"] == m["away_score"] and m["home_score"] >= 0) / n
+    exp_draws = sum(poisson_prob(avg_hg, k) * poisson_prob(avg_ag, k) for k in range(8))
+    if avg_hg * avg_ag > 0:
+        rho = -(obs_draws - exp_draws) / (avg_hg * avg_ag)
+        return max(-0.25, min(0.05, rho))
+    return -0.05
+
+
+def _estimate_dispersion(goals_list):
+    """Estimate NB dispersion r from a goals list.  r = mu^2/(var-mu)."""
+    if not goals_list or len(goals_list) < 10:
+        return 50.0
+    mu = sum(goals_list) / len(goals_list)
+    var = sum((g - mu) ** 2 for g in goals_list) / len(goals_list)
+    if var <= mu:
+        return 50.0  # no overdispersion
+    r = mu ** 2 / (var - mu)
+    return max(1.0, min(50.0, r))
+
+
+def _estimate_zero_inflation(goals_list):
+    """Estimate ZIP pi from observed vs Poisson-expected zero rate."""
+    if not goals_list or len(goals_list) < 10:
+        return 0.0
+    mu = sum(goals_list) / len(goals_list)
+    obs_zero = sum(1 for g in goals_list if g == 0) / len(goals_list)
+    exp_zero = math.exp(-mu) if mu > 0 else 1.0
+    if obs_zero > exp_zero and exp_zero < 1.0:
+        pi = (obs_zero - exp_zero) / (1.0 - exp_zero)
+        return max(0.0, min(0.25, pi))
+    return 0.0
+
+
+def estimate_model_params(league_matches, avg_hg, avg_ag):
+    """Estimate all extra model parameters from league data.
+    Returns dict with rho, home_r, away_r, home_pi, away_pi."""
+    rho = _estimate_rho(league_matches, avg_hg, avg_ag)
+    home_goals = [m["home_score"] for m in league_matches if m["home_score"] >= 0]
+    away_goals = [m["away_score"] for m in league_matches if m["away_score"] >= 0]
+    return {
+        "rho": round(rho, 4),
+        "home_r": round(_estimate_dispersion(home_goals), 2),
+        "away_r": round(_estimate_dispersion(away_goals), 2),
+        "home_pi": round(_estimate_zero_inflation(home_goals), 4),
+        "away_pi": round(_estimate_zero_inflation(away_goals), 4),
+    }
+
+
+# ---------------------------------------------------------------------------
+# ENSEMBLE SCORE MATRIX
+# ---------------------------------------------------------------------------
+# Weights: Dixon-Coles gets the most because it's the gold-standard football
+# model.  Poisson is the baseline.  NB handles variance. ZIP handles 0-0 excess.
+ENSEMBLE_WEIGHTS = {"poisson": 0.20, "dixon_coles": 0.35, "negbin": 0.25, "zip": 0.20}
+
+
+def ensemble_score_matrix(home_xg, away_xg, params, mx=7):
+    """Build a blended score matrix from 4 distribution models.
+    params: dict from estimate_model_params (rho, home_r, away_r, home_pi, away_pi).
+    Returns normalised mx×mx probability matrix."""
+    rho = params.get("rho", -0.05)
+    h_r = params.get("home_r", 50.0)
+    a_r = params.get("away_r", 50.0)
+    h_pi = params.get("home_pi", 0.0)
+    a_pi = params.get("away_pi", 0.0)
+
+    w = ENSEMBLE_WEIGHTS
+    raw = []
+    total = 0.0
+    for i in range(mx):
+        row = []
+        for j in range(mx):
+            p_pois = poisson_prob(home_xg, i) * poisson_prob(away_xg, j)
+            p_dc   = dixon_coles_prob(home_xg, away_xg, rho, i, j)
+            p_nb   = negbin_prob(home_xg, h_r, i) * negbin_prob(away_xg, a_r, j)
+            p_zip  = zip_prob(home_xg, h_pi, i) * zip_prob(away_xg, a_pi, j)
+
+            blended = (w["poisson"] * p_pois + w["dixon_coles"] * p_dc
+                       + w["negbin"] * p_nb + w["zip"] * p_zip)
+            row.append(blended)
+            total += blended
+        raw.append(row)
+
+    # Normalise
+    if total > 0:
+        for i in range(mx):
+            for j in range(mx):
+                raw[i][j] /= total
+    return raw
 
 
 # ---------------------------------------------------------------------------
@@ -457,10 +606,11 @@ def detect_patterns(team_name, limit=15):
 
 
 # ---------------------------------------------------------------------------
-# POISSON xG + PROBABILITIES
+# ENSEMBLE xG + PROBABILITIES
 # ---------------------------------------------------------------------------
 def calculate_xg_and_probabilities(home_team, away_team, league):
-    """Poisson-based expected goals and match outcome probabilities."""
+    """Ensemble-based expected goals and match outcome probabilities.
+    Blends Poisson, Dixon-Coles, Negative Binomial, and Zero-Inflated Poisson."""
     conn = get_db()
     cursor = conn.cursor()
 
@@ -502,14 +652,20 @@ def calculate_xg_and_probabilities(home_team, away_team, league):
     home_xg = h_att * a_def * avg_hg
     away_xg = a_att * h_def * avg_ag
 
-    # Poisson matrix
+    # Estimate distribution parameters from league data
+    model_params = estimate_model_params(league_matches, avg_hg, avg_ag)
+
+    # Ensemble score matrix (blended from 4 models)
+    mx = 7
+    matrix = ensemble_score_matrix(home_xg, away_xg, model_params, mx=mx)
+
     probs = {"home_win": 0, "draw": 0, "away_win": 0,
              "over_1_5": 0, "over_2_5": 0, "over_3_5": 0, "btts": 0}
     score_matrix = []
-    for i in range(7):
+    for i in range(mx):
         row = []
-        for j in range(7):
-            p = poisson_prob(home_xg, i) * poisson_prob(away_xg, j)
+        for j in range(mx):
+            p = matrix[i][j]
             row.append(round(p * 100, 2))
             if i > j: probs["home_win"] += p
             elif i == j: probs["draw"] += p
@@ -532,6 +688,7 @@ def calculate_xg_and_probabilities(home_team, away_team, league):
         "away_defense_strength": round(a_def, 2),
         "probabilities": probs,
         "score_matrix": score_matrix,
+        "model_params": model_params,
     }
 
 
