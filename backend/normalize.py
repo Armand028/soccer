@@ -311,6 +311,33 @@ TEAM_NAME_NORMALIZATION = {
     "West Ham United FC": "West Ham United",
     "Wolverhampton Wanderers FC": "Wolverhampton Wanderers",
     "Rayo Vallecano de Madrid": "Rayo Vallecano",
+
+    # === Copa Libertadores / MLS team variants ===
+    "L.A. Galaxy": "LA Galaxy",
+    "New England Rev.": "New England Revolution",
+    "New York City FC": "New York City",
+    "Montreal Impact": "CF Montréal",
+    "Seattle Sounders FC": "Seattle Sounders",
+
+    # === Copa Libertadores South American team variants ===
+    "Bolívar": "Bolivar",
+    "Botafogo RJ": "Botafogo",
+    "Carabobo F.C.": "Carabobo",
+    "Caracas F.C.": "Caracas",
+    "Deportivo Táchira F.C.": "Deportivo Táchira",
+    "Estudiantes de la Plata": "Estudiantes de La Plata",
+    "FBC Melgar": "Melgar",
+    "Metropolitanos F.C.": "Metropolitanos",
+    "Millonarios F.C.": "Millonarios",
+    "Monagas S.C.": "Monagas",
+    "Portuguesa F.C.": "Portuguesa",
+    "Puerto Cabello F.C.": "Puerto Cabello",
+    "Zamora F.C.": "Zamora",
+    "São Paulo": "Sao Paulo",
+    "Talleres de Córdoba": "Talleres de Cordoba",
+    "Vélez Sarsfield": "Velez Sarsfield",
+    "Estudiantes de Mérida F.C.": "Estudiantes de Mérida",
+    "Real Esppor Club": "Real Esppor",
 }
 
 # Valid date pattern

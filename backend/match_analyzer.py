@@ -68,19 +68,31 @@ def _trend_arrow(old_ppg, new_ppg):
 
 # ===== DATA EXTRACTION =====
 
-def _get_multi_season_record(team, league):
+def _get_multi_season_record(team, league=None):
     conn = get_db()
     c = conn.cursor()
-    c.execute("""
-        SELECT season, COUNT(*) as played,
-               SUM(CASE WHEN (home_team=? AND home_score>away_score) OR (away_team=? AND away_score>home_score) THEN 1 ELSE 0 END) as wins,
-               SUM(CASE WHEN home_score=away_score THEN 1 ELSE 0 END) as draws,
-               SUM(CASE WHEN (home_team=? AND home_score<away_score) OR (away_team=? AND away_score<home_score) THEN 1 ELSE 0 END) as losses,
-               SUM(CASE WHEN home_team=? THEN home_score ELSE away_score END) as gf,
-               SUM(CASE WHEN home_team=? THEN away_score ELSE home_score END) as ga
-        FROM matches WHERE (home_team=? OR away_team=?) AND league=? AND home_score>=0
-        GROUP BY season ORDER BY season
-    """, (team,team,team,team,team,team,team,team,league))
+    if league:
+        c.execute("""
+            SELECT season, COUNT(*) as played,
+                   SUM(CASE WHEN (home_team=? AND home_score>away_score) OR (away_team=? AND away_score>home_score) THEN 1 ELSE 0 END) as wins,
+                   SUM(CASE WHEN home_score=away_score THEN 1 ELSE 0 END) as draws,
+                   SUM(CASE WHEN (home_team=? AND home_score<away_score) OR (away_team=? AND away_score<home_score) THEN 1 ELSE 0 END) as losses,
+                   SUM(CASE WHEN home_team=? THEN home_score ELSE away_score END) as gf,
+                   SUM(CASE WHEN home_team=? THEN away_score ELSE home_score END) as ga
+            FROM matches WHERE (home_team=? OR away_team=?) AND league=? AND home_score>=0
+            GROUP BY season ORDER BY season
+        """, (team,team,team,team,team,team,team,team,league))
+    else:
+        c.execute("""
+            SELECT season, COUNT(*) as played,
+                   SUM(CASE WHEN (home_team=? AND home_score>away_score) OR (away_team=? AND away_score>home_score) THEN 1 ELSE 0 END) as wins,
+                   SUM(CASE WHEN home_score=away_score THEN 1 ELSE 0 END) as draws,
+                   SUM(CASE WHEN (home_team=? AND home_score<away_score) OR (away_team=? AND away_score<home_score) THEN 1 ELSE 0 END) as losses,
+                   SUM(CASE WHEN home_team=? THEN home_score ELSE away_score END) as gf,
+                   SUM(CASE WHEN home_team=? THEN away_score ELSE home_score END) as ga
+            FROM matches WHERE (home_team=? OR away_team=?) AND home_score>=0
+            GROUP BY season ORDER BY season
+        """, (team,team,team,team,team,team,team,team))
     rows = [dict(r) for r in c.fetchall()]
     conn.close()
     return rows
@@ -325,6 +337,53 @@ def _sec_metrics(home, away, xg, fh, fa, fhv, fav):
     return "\n".join(L)
 
 
+def _sec_cross_competition(team, comp_records, combined_form):
+    """Generate cross-competition overview for a team."""
+    if not comp_records:
+        return f"**{team}** — No multi-competition data available."
+    L = [f"**{team}** — Competition Overview:"]
+
+    # Per-competition record table
+    L += ["", "| Competition | Season | P | W | D | L | GF | GA | GD | PPG | Avg GF | Avg GA |",
+          "|-------------|--------|---|---|---|---|----|----|----|----|--------|--------|"]
+    for cr in comp_records:
+        gd = cr["gd"]
+        gds = f"+{gd}" if gd > 0 else str(gd)
+        L.append(f"| {cr['league']} | {cr['season']} | {cr['played']} | {cr['wins']} | {cr['draws']} | {cr['losses']} | {cr['gf']} | {cr['ga']} | {gds} | {cr['ppg']} | {cr['avg_gf']} | {cr['avg_ga']} |")
+
+    # Totals across all competitions
+    if len(comp_records) > 1:
+        tp = sum(c["played"] for c in comp_records)
+        tw = sum(c["wins"] for c in comp_records)
+        td = sum(c["draws"] for c in comp_records)
+        tl = sum(c["losses"] for c in comp_records)
+        tgf = sum(c["gf"] for c in comp_records)
+        tga = sum(c["ga"] for c in comp_records)
+        tgd = tgf - tga
+        tgds = f"+{tgd}" if tgd > 0 else str(tgd)
+        tppg = round((tw * 3 + td) / tp, 2) if tp else 0
+        tavg_gf = round(tgf / tp, 2) if tp else 0
+        tavg_ga = round(tga / tp, 2) if tp else 0
+        L.append(f"| **ALL COMPETITIONS** | | **{tp}** | **{tw}** | **{td}** | **{tl}** | **{tgf}** | **{tga}** | **{tgds}** | **{tppg}** | **{tavg_gf}** | **{tavg_ga}** |")
+
+    # Combined form breakdown
+    if combined_form and combined_form.get("competitions_in_window"):
+        comps_in_window = combined_form["competitions_in_window"]
+        if len(comps_in_window) > 1:
+            L.append(f"\n- Recent {combined_form['total_matches']} matches span {len(comps_in_window)} competitions: {', '.join(comps_in_window)}")
+            bd = combined_form["breakdown"]
+            for comp, stats in bd.items():
+                ct = stats["w"] + stats["d"] + stats["l"]
+                L.append(f"  - {comp}: {ct} matches — {stats['w']}W {stats['d']}D {stats['l']}L ({stats['gf']}GF/{stats['ga']}GA)")
+
+    # Flag multi-competition workload
+    if len(comp_records) >= 2:
+        tp = sum(c["played"] for c in comp_records)
+        L.append(f"\n- *Competing in {len(comp_records)} competitions ({tp} total matches) — schedule congestion factor*")
+
+    return "\n".join(L)
+
+
 def _sec_patterns(ph, pa, home, away):
     L = ["**Detected Patterns:**"]
     any_p = False
@@ -340,8 +399,8 @@ def _sec_patterns(ph, pa, home, away):
 
 # ===== CORE INTELLIGENCE =====
 
-def _sec_insights(home, away, xg, sm, fh, fa, fhv, fav, h2h, th, ta, ph, pa, lph, lpa, sosh, sosa, hsplit, asplit):
-    """Deep probabilistic analysis combining all data sources."""
+def _sec_insights(home, away, xg, sm, fh, fa, fhv, fav, h2h, th, ta, ph, pa, lph, lpa, sosh, sosa, hsplit, asplit, h_comps=None, a_comps=None):
+    """Deep probabilistic analysis combining all data sources incl. cross-competition."""
     I = []
     if not xg or not sm:
         return "**Analysis:** Insufficient data."
@@ -477,6 +536,35 @@ def _sec_insights(home, away, xg, sm, fh, fa, fhv, fav, h2h, th, ta, ph, pa, lph
         if pp["type"]=="hot": I.append(f"**Hot [{away}]:** {pp['text']} — *momentum factor*.")
         elif pp["type"]=="warning" and "defensive" in pp["text"].lower(): I.append(f"**Warning [{away}]:** {pp['text']} — *exploitable by {home}*.")
 
+    # 11. Cross-competition context
+    for team, comps in [(home, h_comps or []), (away, a_comps or [])]:
+        if len(comps) >= 2:
+            comp_names = [c["league"] for c in comps]
+            tp = sum(c["played"] for c in comps)
+            tw = sum(c["wins"] for c in comps)
+            overall_ppg = round(_sd(tw * 3 + sum(c["draws"] for c in comps), tp), 2)
+            # Check for European competition
+            euro_comp = next((c for c in comps if "UEFA" in c["league"] or "Champions" in c["league"] or "Europa" in c["league"]), None)
+            if euro_comp:
+                ep = euro_comp["played"]
+                ew = euro_comp["wins"]
+                eppg = euro_comp["ppg"]
+                I.append(f"**European Campaign [{team}]:** Active in {euro_comp['league']} ({ep}P {ew}W, {eppg} ppg). "
+                         f"Playing {len(comps)} competitions ({tp} total matches) — *schedule congestion and fatigue factor*.")
+            else:
+                I.append(f"**Multi-Competition [{team}]:** Active in {len(comps)} competitions ({', '.join(comp_names)}). "
+                         f"{tp} total matches, {overall_ppg} ppg across all. *Workload may affect performance.*")
+            # Compare domestic vs cup form
+            domestic = comps[0]  # sorted by played desc, so first is domestic
+            if len(comps) > 1 and domestic["ppg"] > 0:
+                cup_ppg = round(_sd(
+                    sum(c["wins"] * 3 + c["draws"] for c in comps[1:]),
+                    sum(c["played"] for c in comps[1:])), 2)
+                if cup_ppg > domestic["ppg"] + 0.3:
+                    I.append(f"**Cup Specialist [{team}]:** Better in secondary competitions ({cup_ppg} ppg) than {domestic['league']} ({domestic['ppg']} ppg).")
+                elif domestic["ppg"] > cup_ppg + 0.5:
+                    I.append(f"**Domestic Focus [{team}]:** Stronger in {domestic['league']} ({domestic['ppg']} ppg) than cups ({cup_ppg} ppg) — *may prioritize league*.")
+
     return "**Analysis & Insights:**\n\n" + "\n\n".join(I)
 
 
@@ -611,11 +699,18 @@ def generate_match_report(home_team, away_team, league):
     lp = analysis["league_position"]
     pats = analysis["patterns"]
 
+    # Cross-competition data
+    cc = analysis.get("cross_competition", {})
+    h_comp_records = cc.get("home", [])
+    a_comp_records = cc.get("away", [])
+    h_combined = cc.get("home_combined")
+    a_combined = cc.get("away_combined")
+
     # Extra data
     h_split = _get_home_away_split(home_team)
     a_split = _get_home_away_split(away_team)
-    h_seasons = _get_multi_season_record(home_team, league)
-    a_seasons = _get_multi_season_record(away_team, league)
+    h_seasons = _get_multi_season_record(home_team)
+    a_seasons = _get_multi_season_record(away_team)
     h_traj = _season_trajectory(h_seasons)
     a_traj = _season_trajectory(a_seasons)
 
@@ -647,11 +742,14 @@ def generate_match_report(home_team, away_team, league):
     sec["scores"] = _sec_scores(home_team, away_team, sm) if sm else "Score matrix unavailable."
     sec["metrics"] = _sec_metrics(home_team, away_team, xg, fh, fa, fhv, fav)
     sec["patterns"] = _sec_patterns(pats["home"], pats["away"], home_team, away_team)
+    sec["h_cross_comp"] = _sec_cross_competition(home_team, h_comp_records, h_combined)
+    sec["a_cross_comp"] = _sec_cross_competition(away_team, a_comp_records, a_combined)
     sec["insights"] = _sec_insights(
         home_team, away_team, xg, sm, fh, fa, fhv, fav,
         h2h, trends["home"], trends["away"],
         pats["home"], pats["away"], lp["home"], lp["away"],
-        h_sos, a_sos, h_split, a_split)
+        h_sos, a_sos, h_split, a_split,
+        h_comp_records, a_comp_records)
     sec["verdict"] = _sec_verdict(
         home_team, away_team, xg, sm, fh, fa, fhv, fav,
         h2h, lp["home"], lp["away"], h_sos, a_sos)
@@ -727,7 +825,15 @@ def generate_match_report(home_team, away_team, league):
 
 ---
 
-## Multi-Season Context
+## Cross-Competition Overview
+
+{sec["h_cross_comp"]}
+
+{sec["a_cross_comp"]}
+
+---
+
+## Multi-Season Context (All Competitions)
 
 {sec["multi_season"]}
 

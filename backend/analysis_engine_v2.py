@@ -506,6 +506,123 @@ def get_league_table(league, season=None):
 
 
 # ---------------------------------------------------------------------------
+# CROSS-COMPETITION ANALYSIS
+# ---------------------------------------------------------------------------
+
+def get_team_competitions(team_name, season=None):
+    """Return all competitions a team participates in (optionally for a season)."""
+    conn = get_db()
+    cursor = conn.cursor()
+    if season:
+        cursor.execute("""
+            SELECT DISTINCT league FROM matches
+            WHERE (home_team = ? OR away_team = ?) AND season = ? AND home_score >= 0
+        """, (team_name, team_name, season))
+    else:
+        # Latest season per competition
+        cursor.execute("""
+            SELECT DISTINCT league FROM matches
+            WHERE (home_team = ? OR away_team = ?) AND home_score >= 0
+              AND season = (SELECT MAX(m2.season) FROM matches m2
+                            WHERE m2.league = matches.league AND m2.home_score >= 0)
+        """, (team_name, team_name))
+    comps = [r["league"] for r in cursor.fetchall()]
+    conn.close()
+    return comps
+
+
+def get_cross_competition_record(team_name):
+    """Per-competition record for a team in the latest season of each competition."""
+    conn = get_db()
+    cursor = conn.cursor()
+    # Find latest season per competition the team plays in
+    cursor.execute("""
+        SELECT league, MAX(season) as latest_season
+        FROM matches
+        WHERE (home_team = ? OR away_team = ?) AND home_score >= 0
+        GROUP BY league
+    """, (team_name, team_name))
+    comp_seasons = cursor.fetchall()
+
+    records = []
+    for cs in comp_seasons:
+        league, season = cs["league"], cs["latest_season"]
+        cursor.execute("""
+            SELECT * FROM matches
+            WHERE (home_team = ? OR away_team = ?) AND league = ? AND season = ?
+              AND home_score >= 0
+            ORDER BY COALESCE(kickoff_timestamp, id) DESC
+        """, (team_name, team_name, league, season))
+        rows = cursor.fetchall()
+        if not rows:
+            continue
+        w, d, l_cnt, gf, ga = 0, 0, 0, 0, 0
+        for r in rows:
+            is_home = r["home_team"] == team_name
+            g_for = r["home_score"] if is_home else r["away_score"]
+            g_ag = r["away_score"] if is_home else r["home_score"]
+            gf += g_for
+            ga += g_ag
+            if g_for > g_ag:
+                w += 1
+            elif g_for == g_ag:
+                d += 1
+            else:
+                l_cnt += 1
+        played = w + d + l_cnt
+        records.append({
+            "league": league,
+            "season": season,
+            "played": played,
+            "wins": w,
+            "draws": d,
+            "losses": l_cnt,
+            "gf": gf,
+            "ga": ga,
+            "gd": gf - ga,
+            "ppg": round(safe_div(w * 3 + d, played), 2),
+            "avg_gf": round(safe_div(gf, played), 2),
+            "avg_ga": round(safe_div(ga, played), 2),
+        })
+    conn.close()
+    # Sort: domestic leagues first (more matches), then cups
+    records.sort(key=lambda x: x["played"], reverse=True)
+    return records
+
+
+def get_combined_form(team_name, limit=15):
+    """Get form across ALL competitions (most recent matches regardless of league)."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("""SELECT * FROM matches WHERE (home_team = ? OR away_team = ?)
+                      AND home_score >= 0 ORDER BY COALESCE(kickoff_timestamp, id) DESC LIMIT ?""",
+                    (team_name, team_name, limit))
+    rows = cursor.fetchall()
+    conn.close()
+
+    comp_breakdown = defaultdict(lambda: {"w": 0, "d": 0, "l": 0, "gf": 0, "ga": 0})
+    for r in rows:
+        is_home = r["home_team"] == team_name
+        g_for = r["home_score"] if is_home else r["away_score"]
+        g_ag = r["away_score"] if is_home else r["home_score"]
+        lg = r["league"]
+        comp_breakdown[lg]["gf"] += g_for
+        comp_breakdown[lg]["ga"] += g_ag
+        if g_for > g_ag:
+            comp_breakdown[lg]["w"] += 1
+        elif g_for == g_ag:
+            comp_breakdown[lg]["d"] += 1
+        else:
+            comp_breakdown[lg]["l"] += 1
+
+    return {
+        "total_matches": len(rows),
+        "competitions_in_window": list(comp_breakdown.keys()),
+        "breakdown": dict(comp_breakdown),
+    }
+
+
+# ---------------------------------------------------------------------------
 # PATTERN DETECTION
 # ---------------------------------------------------------------------------
 def detect_patterns(team_name, limit=15):
@@ -729,6 +846,12 @@ def generate_full_analysis(home_team, away_team, league):
     home_patterns = detect_patterns(home_team, limit=15)
     away_patterns = detect_patterns(away_team, limit=15)
 
+    # Cross-competition context
+    home_comps = get_cross_competition_record(home_team)
+    away_comps = get_cross_competition_record(away_team)
+    home_combined = get_combined_form(home_team, limit=15)
+    away_combined = get_combined_form(away_team, limit=15)
+
     return {
         "home_team": home_team,
         "away_team": away_team,
@@ -756,5 +879,11 @@ def generate_full_analysis(home_team, away_team, league):
         "patterns": {
             "home": home_patterns,
             "away": away_patterns,
+        },
+        "cross_competition": {
+            "home": home_comps,
+            "away": away_comps,
+            "home_combined": home_combined,
+            "away_combined": away_combined,
         },
     }

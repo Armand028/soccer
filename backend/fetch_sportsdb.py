@@ -37,6 +37,15 @@ LEAGUES = {
     "4334": ("France ligue 1", 38),   # 38 until 2022-23, then 34 from 2023-24
     "4480": ("UEFA Champions League", 15),  # group+knockout rounds vary
     "4481": ("UEFA Europa League", 15),
+    "4346": ("American Major League Soccer", 38),
+    "4501": ("Copa Libertadores", 15),
+}
+
+# Extra round numbers to try for competitions with qualifying/preliminary stages
+EXTRA_ROUNDS = {
+    "4501": [100, 200, 300, 400],  # Copa Libertadores qualifying rounds
+    "4480": [100, 200, 300, 400],  # UCL qualifying rounds
+    "4481": [100, 200, 300, 400],  # UEL qualifying rounds
 }
 
 # Cup competitions — 2025-2026 only
@@ -186,6 +195,7 @@ def fetch_season_full(league_id, season, silent=False):
     total_events, ins, upd, link = 0, 0, 0, 0
     empty_streak = 0
 
+    # Standard sequential rounds
     for rnd in range(1, max_rounds + 1):
         data = api_get(f"eventsround.php?id={lid}&r={rnd}&s={season}")
         events = (data.get("events") or []) if data else []
@@ -213,10 +223,29 @@ def fetch_season_full(league_id, season, silent=False):
 
         time.sleep(3)  # respect rate limits
 
+    # Extra rounds (qualifying / preliminary stages)
+    extra = EXTRA_ROUNDS.get(lid, [])
+    for rnd in extra:
+        data = api_get(f"eventsround.php?id={lid}&r={rnd}&s={season}")
+        events = (data.get("events") or []) if data else []
+        if events:
+            total_events += len(events)
+            for ev in events:
+                result = upsert_match(cursor, ev, league_name)
+                if result == "inserted":
+                    ins += 1
+                elif result == "updated":
+                    upd += 1
+                elif result == "linked":
+                    link += 1
+            if not silent:
+                log.info(f"  Round {rnd} (extra): {len(events)} events")
+        time.sleep(3)
+
     conn.commit()
     conn.close()
     if not silent:
-        log.info(f"  {total_events} events across {rnd} rounds -> {ins} new, {upd} updated, {link} linked")
+        log.info(f"  {total_events} events -> {ins} new, {upd} updated, {link} linked")
     return ins, upd
 
 
